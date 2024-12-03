@@ -1,37 +1,19 @@
-import asyncio
-import cloudscraper
-import json
-import time
-from loguru import logger
-import requests
-from concurrent.futures import ThreadPoolExecutor
-from colorama import Fore, init, Style
-import sys
+import asyncio 
+import aiohttp 
+import time 
+import uuid 
+from curl_cffi import requests 
+from loguru import logger 
+from colorama import Fore 
+from fake_useragent import UserAgent
 
-
-init(autoreset=True, strip=False)
-
-
-logger.remove()
-logger.add(
-    sys.stderr,
-    format="<level>{level: <8}</level> | {time:YYYY-MM-DD HH:mm} | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-    level="DEBUG",
-    colorize=True
-)
-
-PING_INTERVAL = 5
+# Constants
+PING_INTERVAL = 60
 RETRIES = 60
 
 DOMAIN_API = {
     "SESSION": "http://api.nodepay.ai/api/auth/session",
-    
-    "PING": [
-        "http://18.142.29.174/api/network/ping",
-        "https://nw.nodepay.org/api/network/ping"
-        
-    
-    ]
+    "PING": "https://nw.nodepay.org/api/network/ping"
 }
 
 CONNECTION_STATES = {
@@ -40,193 +22,154 @@ CONNECTION_STATES = {
     "NONE_CONNECTION": 3
 }
 
-def load_proxies():
+status_connect = CONNECTION_STATES["NONE_CONNECTION"]
+browser_id = None
+account_info = {}
+last_ping_time = {}
+
+def uuidv4():
+    return str(uuid.uuid4())
+
+def valid_resp(resp):
+    if not resp or "code" not in resp or resp["code"] < 0:
+        raise ValueError("Invalid response")
+    return resp
+
+async def render_profile_info(token):
+    global browser_id, account_info
+
     try:
-        with open('proxy.txt', 'r') as file:
-            proxies = file.read().splitlines()
-        return proxies
+        np_session_info = load_session_info()
+
+        if not np_session_info:
+            # Generate new browser_id
+            browser_id = uuidv4()
+            response = await call_api(DOMAIN_API["SESSION"], {}, token)
+            valid_resp(response)
+            account_info = response["data"]
+            if account_info.get("uid"):
+                save_session_info(account_info)
+                await start_ping(token)
+            else:
+                handle_logout()
+        else:
+            account_info = np_session_info
+            await start_ping(token)
     except Exception as e:
-        logger.error(f"Failed to load proxies: {e}")
-        raise SystemExit("Exiting due to failure in loading proxies")
+        logger.error(f"Error in render_profile_info: {e}")
+        error_message = str(e)
+        if any(phrase in error_message for phrase in [
+            "sent 1011 (internal error) keepalive ping timeout; no close frame received",
+            "500 Internal Server Error"
+        ]):
+            logger.info("Removing error account info due to invalid response.")
+            handle_logout()
+        else:
+            logger.error(f"Connection error: {e}")
 
-BASE_PROXY = load_proxies()[0]
-
-
-class AccountInfo:
-    def __init__(self, token):
-        self.token = token
-        self.proxies = [BASE_PROXY] * 3
-        self.status_connect = CONNECTION_STATES["NONE_CONNECTION"]
-        self.account_data = {}
-        self.retries = 0
-        self.last_ping_status = 'Waiting...'
-        self.browser_id = {
-            'ping_count': 0,
-            'successful_pings': 0,
-            'score': 0,
-            'start_time': time.time(),
-            'last_ping_time': None
-        }
-
-    def reset(self):
-        self.status_connect = CONNECTION_STATES["NONE_CONNECTION"]
-        self.account_data = {}
-        self.retries = 3
-
-
-scraper = cloudscraper.create_scraper(
-    browser={
-        'browser': 'chrome',
-        'platform': 'windows',
-        'desktop': True
-    }
-)
-
-
-async def load_tokens():
-    try:
-        with open('token.txt', 'r') as file:
-            tokens = file.read().splitlines()
-        return tokens
-    except Exception as e:
-        logger.error(f"Failed to load tokens: {e}")
-        raise SystemExit("Exiting due to failure in loading tokens")
-
-
-async def call_api(url, data, account_info, proxy):
+async def call_api(url, data, token):
+    user_agent = UserAgent(os=['windows', 'macos', 'linux'], browsers='chrome')
+    random_user_agent = user_agent.random
     headers = {
-        "Authorization": f"Bearer {account_info.token}",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://app.nodepay.ai/",
-        "Accept": "application/json, text/plain, */*",
+        "Authorization": f"Bearer {token}",
+        "User-Agent": random_user_agent,
         "Content-Type": "application/json",
         "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
-        "Sec-Ch-Ua": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
-        "Sec-Ch-Ua-Mobile": "?0",
-        "Sec-Ch-Ua-Platform": '"Windows"',
-        "sec-fetch-dest": "empty",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-site": "cors-site"
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.5",
     }
 
-    proxy_config = {
-        "http": proxy,
-        "https": proxy
-    }
-
-    loop = asyncio.get_event_loop()
-    with ThreadPoolExecutor(max_workers=30) as executor:
-        try:
-            response = await loop.run_in_executor(
-                executor,
-                lambda: scraper.post(url, json=data, headers=headers, proxies=proxy_config, timeout=30)
-            )
-            response.raise_for_status()
-        except Exception as e:
-            logger.error(f"Error during API call for token {account_info.token} with proxy {proxy}: {e}")
-            raise ValueError(f"Failed API call to {url}")
-
-    return response.json()
-
-
-async def render_profile_info(account_info):
     try:
-        for proxy in account_info.proxies:
-            try:
-                response = await call_api(DOMAIN_API["SESSION"], {}, account_info, proxy)
-                if response.get("code") == 0:
-                    account_info.account_data = response["data"]
-                    if account_info.account_data.get("uid"):
-                        await start_ping(account_info)
-                        return
-                else:
-                    logger.warning(f"Session failed for token {account_info.token} using proxy {proxy}")
-            except Exception as e:
-                logger.error(f"Failed to render profile info for token {account_info.token} using proxy {proxy}: {e}")
+        response = requests.post(url, json=data, headers=headers, impersonate="chrome110", timeout=30)
 
-        logger.error(f"All proxies failed for token {account_info.token}")
+        response.raise_for_status()
+        return valid_resp(response.json())
     except Exception as e:
-        logger.error(f"Error in render_profile_info for token {account_info.token}: {e}")
+        logger.error(f"Error during API call: {e}")
+        raise ValueError(f"Failed API call to {url}")
 
-
-async def start_ping(account_info):
+async def start_ping(token):
     try:
-        logger.info(f"Starting ping for token {account_info.token}")
-        url_index = 0
         while True:
-            for proxy in account_info.proxies:
-                try:
-                    await asyncio.sleep(PING_INTERVAL)
-                    await ping(account_info, proxy, url_index)
-                    url_index = (url_index + 1) % len(DOMAIN_API["PING"])
-                except Exception as e:
-                    logger.error(f"Ping failed for token {account_info.token} using proxy {proxy}: {e}")
+            await ping(token)
+            await asyncio.sleep(PING_INTERVAL)
     except asyncio.CancelledError:
-        logger.info(f"Ping task for token {account_info.token} was cancelled")
+        logger.info(f"Ping task was cancelled")
     except Exception as e:
-        logger.error(f"Error in start_ping for token {account_info.token}: {e}")
+        logger.error(f"Error in start_ping: {e}")
 
+async def ping(token):
+    global last_ping_time, RETRIES, status_connect
 
-async def ping(account_info, proxy, url_index):
-    url = DOMAIN_API["PING"][url_index]
+    current_time = time.time()
+
+    if "last_ping_time" in last_ping_time and (current_time - last_ping_time["last_ping_time"]) < PING_INTERVAL:
+        logger.info("Skipping ping, not enough time elapsed")
+        return
+
+    last_ping_time["last_ping_time"] = current_time
+
     try:
         data = {
-            "id": account_info.account_data.get("uid"),
-            "browser_id": account_info.browser_id,
-            "timestamp": int(time.time())
+            "id": account_info.get("uid"),
+            "browser_id": browser_id,
+            "timestamp": int(time.time()),
+            "version": "2.2.7"
         }
-        response = await call_api(url, data, account_info, proxy)
+
+        response = await call_api(DOMAIN_API["PING"], data, token)
         if response["code"] == 0:
-            if '@' in proxy:
-                proxy_ip = proxy.split('@')[-1].split(':')[0]
-            else:
-                proxy_ip = proxy.split('://')[-1].split(':')[0]
-            logger.info(f"{Fore.GREEN}Ping successful for token using proxy IP {proxy_ip}{Style.RESET_ALL}")
-            
-            account_info.browser_id['successful_pings'] += 1
-            if account_info.browser_id['successful_pings'] == 3:
-                logger.info(f"{Fore.YELLOW}Switching account for token {account_info.token}{Style.RESET_ALL}")
-                return
-            
-            return
-    except Exception as e:
-        if '@' in proxy:
-            proxy_ip = proxy.split('@')[-1].split(':')[0]
+            logger.info(f"Ping successful: {response}")
+            RETRIES = 0
+            status_connect = CONNECTION_STATES["CONNECTED"]
         else:
-            proxy_ip = proxy.split('://')[-1].split(':')[0]
-        logger.error(f"Ping failed for token {account_info.token} using URL {url} and proxy IP {proxy_ip}: {e}")
+            handle_ping_fail(response)
+    except Exception as e:
+        logger.error(f"Ping failed: {e}")
+        handle_ping_fail(None)
 
+def handle_ping_fail(response):
+    global RETRIES, status_connect
 
-async def process_account(token):
-    """
-    Process a single account: Initialize proxies and start asyncio event loop for this account.
-    """
-    account_info = AccountInfo(token)
-    await render_profile_info(account_info)
+    RETRIES += 1
+    if response and response.get("code") == 403:
+        handle_logout()
+    elif RETRIES < 2:
+        status_connect = CONNECTION_STATES["DISCONNECTED"]
+    else:
+        status_connect = CONNECTION_STATES["DISCONNECTED"]
 
+def handle_logout():
+    global status_connect, account_info
 
-async def process_account_threaded(token):
-    """
-    Wrapper function to run process_account in a thread.
-    """
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(executor, asyncio.run, process_account(token))
+    status_connect = CONNECTION_STATES["NONE_CONNECTION"]
+    account_info = {}
+    logger.info("Logged out and cleared session info.")
 
+def save_session_info(data):
+    # Saving session info (this could be to a file or a database)
+    pass
+
+def load_session_info():
+    return {}  # Return an empty dictionary if no session is saved
 
 async def main():
-    tokens = await load_tokens()
+    # Load token from token.txt
+    try:
+        with open("token.txt", "r") as file:
+            token = file.read().strip()
+        if not token:
+            raise ValueError("Token file is empty.")
+    except FileNotFoundError:
+        logger.error("Token file 'token.txt' not found. Please create the file and add your token.")
+        exit()
+    except ValueError as e:
+        logger.error(str(e))
+        exit()
 
-    # Use ThreadPoolExecutor to run account processes in separate threads
-    global executor
-    executor = ThreadPoolExecutor(max_workers=20)
-
-    # Use asyncio.gather to run all account processes concurrently
-    await asyncio.gather(*(process_account_threaded(token) for token in tokens))
-
-    # Shutdown the executor
-    executor.shutdown(wait=True)
-
+    while True:
+        await render_profile_info(token)
+        await asyncio.sleep(3)
 
 if __name__ == '__main__':
     try:
