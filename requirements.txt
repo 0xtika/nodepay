@@ -1,6 +1,6 @@
+asyncio
 aiohttp
+uuid
 cloudscraper
 loguru
-fake-useragent
-python-dateutil
 colorama
