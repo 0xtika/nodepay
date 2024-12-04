@@ -4,3 +4,4 @@ uuid
 cloudscraper
 loguru
 colorama
+fake_useragent
