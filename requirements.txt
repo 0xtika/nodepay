@@ -7,3 +7,4 @@ colorama
 pytz
 fake-useragent
 python-dateutil
+requests
