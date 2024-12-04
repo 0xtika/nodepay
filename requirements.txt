@@ -4,4 +4,6 @@ uuid
 cloudscraper
 loguru
 colorama
-fake_useragent
+pytz
+fake-useragent
+python-dateutil
