@@ -14,7 +14,7 @@ logger.add(
 )
 # Read Tokens and Proxy count
 def read_tokens():
-    with open('tokens.txt', 'r') as file:
+    with open('token.txt', 'r') as file:
         tokens_content = sum(1 for line in file)
     return tokens_content
 
