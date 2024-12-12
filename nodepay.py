@@ -161,8 +161,8 @@ def schedule_daily_claim():
     run_daily_claim()
 
     # Jadwalkan klaim untuk dijalankan setiap pukul 00:00
-    schedule.every().day.at("00:00").do(run_daily_claim)
-    logger.info("Scheduled daily reward claim at 00:00.")
+    schedule.every().day.at("08:00").do(run_daily_claim)
+    logger.info("Scheduled daily reward claim at 08:00.")
 
     while True:
         schedule.run_pending()
@@ -181,9 +181,6 @@ async def main():
     except ValueError as e:
         logger.error(str(e))
         exit()
-
-    # Mulai proses klaim harian dengan penjadwalan
-    logger.info("Starting the daily claim scheduler...")
     asyncio.create_task(asyncio.to_thread(schedule_daily_claim))  # Penjadwalan klaim harian
 
     while True:
