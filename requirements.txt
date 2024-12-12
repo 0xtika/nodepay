@@ -8,5 +8,4 @@ pytz
 fake-useragent==1.5.0
 python-dateutil
 requests
-pyfiglet
 schedule
