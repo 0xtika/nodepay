@@ -56,7 +56,7 @@ def claim_reward(token):
 
 def main():
     try:
-        with open('tokens.txt', 'r') as file:
+        with open('token.txt', 'r') as file:
             tokens = file.read().splitlines()
 
         for token in tokens:
@@ -66,7 +66,7 @@ def main():
         logger.success(f"All tokens processed. Daily claim operation completed.")
 
     except FileNotFoundError:
-        logger.error(f"The file 'tokens.txt' was not found. Please make sure it exists.")
+        logger.error(f"The file 'token.txt' was not found. Please make sure it exists.")
     except Exception as e:
         logger.exception(f"An unexpected error occurred: {e}")
 
