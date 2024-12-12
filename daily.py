@@ -22,7 +22,7 @@ tokens_content = read_tokens()
 
 # Print the token count
 print()
-print(f"🔑 Tokens: {tokens_content}.")
+print(f"🔑 Account Found: {tokens_content}.")
 print()
 
 def truncate_token(token):
