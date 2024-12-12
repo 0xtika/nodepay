@@ -158,8 +158,10 @@ def dailyclaim(token):
             response_data = response.json()
             if response_data.get('success'):
                 logger.success(f"Token: {truncate_token(token)} | Reward claimed successfully")
-            else:
+                return True
+        else:
                 logger.info(f"Token: {truncate_token(token)} | Reward already claimed or another issue occurred")
+            return True
         else:
             logger.error(f"Token: {truncate_token(token)} | Failed request, HTTP Status: {response.status_code}")
     except requests.exceptions.RequestException as e:
