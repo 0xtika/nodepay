@@ -11,3 +11,4 @@ requests
 schedule
 curl_cffi
 pyfiglet
+termcolor
