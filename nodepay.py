@@ -148,14 +148,10 @@ def dailyclaim(token):
     url = DOMAIN_API["DAILY_CLAIM"]
     headers = {
         "Authorization": f"Bearer {token}",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
         "Content-Type": "application/json",
         "Origin": "https://app.nodepay.ai",
-        "Referer": "https://app.nodepay.ai/",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Accept": "*/*",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1"
+        "Referer": "https://app.nodepay.ai/"
     }
     data = {
         "mission_id": "1"
