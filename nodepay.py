@@ -24,8 +24,7 @@ RETRIES = 60
 DOMAIN_API = {
     "SESSION": "http://api.nodepay.ai/api/auth/session",
     "PING": ["https://nw.nodepay.org/api/network/ping"],
-    "DAILY_CLAIM": "https://api.nodepay.org/api/mission/complete-mission",
-    "DEVICE_NETWORK": "https://api.nodepay.org/api/network/device-networks"
+    "DAILY_CLAIM": "https://api.nodepay.org/api/mission/complete-mission"
 }
 
 CONNECTION_STATES = {
@@ -258,10 +257,6 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
                 status_connect = CONNECTION_STATES["CONNECTED"]
                 response_data = response["data"]
                 ip_score = response_data.get("ip_score", "N/A")
-                total_points = await get_total_points(token, ip_score=ip_score, proxy=proxy, name=name)
-                total_points = last_valid_points if total_points == 0 and last_valid_points > 0 else total_points
-                last_valid_points = total_points
-
                 identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
                 logger.info(
                     f"<green>Ping Successfully</green>, Network Quality: <cyan>{ip_score}</cyan>, "
