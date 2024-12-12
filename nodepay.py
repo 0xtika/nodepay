@@ -229,7 +229,7 @@ async def get_account_info(token, proxy=None):
         logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
     return None
 
-await start_ping(token, account_info, proxy, ping_interval=10.0, browser_id=browser_id)
+await start_ping(token, account_info, proxy, ping_interval, browser_id=browser_id)
     global last_ping_time, RETRIES, status_connect
     browser_id = browser_id or str(uuid.uuid4())
     url_index = 0
@@ -294,7 +294,7 @@ await start_ping(token, account_info, proxy, ping_interval=10.0, browser_id=brow
 
         await asyncio.sleep(ping_interval)
 
-async def process_account(token, use_proxy, proxies=None, ping_interval=10.0):
+async def process_account(token, use_proxy, proxies=None, ping_interval):
     proxies = proxies or []
     proxy_list = proxies if use_proxy else [None]
 
