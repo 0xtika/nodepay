@@ -229,7 +229,7 @@ async def get_account_info(token, proxy=None):
         logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
     return None
 
-async def start_ping(token, account_info, proxy, ping_interval, browser_id=None):
+await start_ping(token, account_info, proxy, ping_interval=10.0, browser_id=browser_id)
     global last_ping_time, RETRIES, status_connect
     browser_id = browser_id or str(uuid.uuid4())
     url_index = 0
