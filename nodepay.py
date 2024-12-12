@@ -156,20 +156,19 @@ def load_session_info():
     return {}  # Return an empty dictionary if no session is saved
 
 def schedule_daily_claim():
-    """Jadwalkan run_daily_claim untuk dijalankan segera dan setiap pukul 00:00."""
-    # Jalankan klaim langsung setelah program dimulai
     run_daily_claim()
-
-    # Jadwalkan klaim untuk dijalankan setiap pukul 00:00
     schedule.every().day.at("08:00").do(run_daily_claim)
     logger.info("Scheduled daily reward claim at 08:00.")
 
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    try:
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("Program terminated by user.")
+        exit(0) 
 
 async def main():
-    # Load token from token.txt
     try:
         with open("token.txt", "r") as file:
             token = file.read().strip()
@@ -181,7 +180,7 @@ async def main():
     except ValueError as e:
         logger.error(str(e))
         exit()
-    asyncio.create_task(asyncio.to_thread(schedule_daily_claim))  # Penjadwalan klaim harian
+    asyncio.create_task(asyncio.to_thread(schedule_daily_claim))
 
     while True:
         await render_profile_info(token)
