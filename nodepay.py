@@ -191,7 +191,7 @@ async def call_api(url, data, token, proxy=None, timeout=60):
         logger.error(f"Request error during API call to {url}: {e}") if SHOW_REQUEST_ERROR_LOG else None
         if response and response.status_code == 403:
             logger.error("<red>Access denied (HTTP 403). Possible invalid token or blocked IP/proxy.</red>")
-            time.sleep(random.uniform(5, 10))
+            time.sleep(random.uniform(10, 15))
             return None
         elif response and response.status_code == 429:
             retry_after = response.headers.get("Retry-After", "unknown")
