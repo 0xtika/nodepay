@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 import cloudscraper
 import requests
+from curl_cffi import requests
 from loguru import logger
 from pyfiglet import figlet_format
 from termcolor import colored
@@ -60,7 +61,7 @@ def print_header():
     print("\nWelcome to NodepayBot - Automate your tasks effortlessly!")
 
 def print_file_info():
-    tokens = load_file('token.txt')
+    tokens = load_file('tokens.txt')
     proxies = load_file('proxies.txt')
     border = "=" * 40
 
@@ -70,6 +71,21 @@ def print_file_info():
         "\nNodepay only supports 3 connections per account. Using too many proxies may cause issues.\n"
         f"\n{border}"
     )
+
+def ask_user_for_proxy():
+    while (user_input := input("Do you want to use proxy? (yes/no)? ").strip().lower()) not in ['yes', 'no']:
+        print("Invalid input. Please enter 'yes' or 'no'.")
+
+    print(f"You selected: {'Yes' if user_input == 'yes' else 'No'}, ENJOY!\n")
+
+    if user_input == 'yes':
+        proxies = load_proxies()
+        if not proxies:
+            logger.error("<red>No proxies found in 'proxies.txt'. Please add valid proxies.</red>")
+            return []
+        return proxies
+    else:
+        return []
 
 def load_file(filename, split_lines=True):
     try:
@@ -123,7 +139,7 @@ def log_user_data(users_data):
             logger.error(f"Logging error: {e}")
 
 def dailyclaim(token):
-    tokens = load_file("token.txt")
+    tokens = load_file("tokens.txt")
     if not tokens or token not in tokens:
         return False
 
@@ -132,10 +148,14 @@ def dailyclaim(token):
     url = DOMAIN_API["DAILY_CLAIM"]
     headers = {
         "Authorization": f"Bearer {token}",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Content-Type": "application/json",
         "Origin": "https://app.nodepay.ai",
-        "Referer": "https://app.nodepay.ai/"
+        "Referer": "https://app.nodepay.ai/",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept": "*/*",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1"
     }
     data = {
         "mission_id": "1"
@@ -158,49 +178,26 @@ def dailyclaim(token):
         logger.error(f"Request failed: {e}") if SHOW_REQUEST_ERROR_LOG else None
         return False
 
-async def get_account_info(token, proxy=None):
-    url = DOMAIN_API["SESSION"]
-    try:
-        response = await call_api(url, {}, token, proxy)
-        if response:
-            logger.info(f"<green>Account info for token {token[-10:]}: {response}</green>")
-            if response.get("code") == 0:
-                data = response["data"]
-                return {
-                    "name": data.get("name", "Unknown"),
-                    "ip_score": data.get("ip_score", "N/A"),
-                    **data
-                }
-            else:
-                logger.error(f"<red>Error: {response.get('message', 'No message')}")
-        else:
-            logger.error("<red>No response received from API</red>")
-    except Exception as e:
-        logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
-    return None
-
 async def call_api(url, data, token, proxy=None, timeout=60):
     headers = {
         "Authorization": f"Bearer {token}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://app.nodepay.ai/",
-        "Accept": "application/json, text/plain, */*",
-        "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
-        "Sec-Ch-Ua": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
-        "Sec-Ch-Ua-Mobile": "?0",
-        "Sec-Ch-Ua-Platform": '"Windows"',
-        "sec-fetch-dest": "empty",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-site": "cors-site"
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://app.nodepay.ai/",
+            "Accept": "application/json, text/plain, */*",
+            "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
+            "Sec-Ch-Ua": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cors-site"
     }
 
     response = None
 
     try:
-        logger.info(f"Sending request to {url} with token: {token[-10:]} and proxy: {proxy}")
-        response = requests.post(url, json=data, headers=headers, proxies={"http": proxy, "https": proxy}, timeout=15)
-        logger.info(f"Received response: {response.status_code} {response.text}")
+        response = requests.post(url, json=data, headers=headers, impersonate="safari15_5", proxies={"http": proxy, "https": proxy}, timeout=15)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -221,6 +218,21 @@ async def call_api(url, data, token, proxy=None, timeout=60):
     except Exception as e:
         logger.error(f"Unexpected error during API call: {e}") if SHOW_REQUEST_ERROR_LOG else None
 
+    return None
+
+async def get_account_info(token, proxy=None):
+    url = DOMAIN_API["SESSION"]
+    try:
+        response = await call_api(url, {}, token, proxy)
+        if response and response.get("code") == 0:
+            data = response["data"]
+            return {
+                "name": data.get("name", "Unknown"),
+                "ip_score": data.get("ip_score", "N/A"),
+                **data
+            }
+    except Exception as e:
+        logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
     return None
 
 async def start_ping(token, account_info, proxy, ping_interval, browser_id=None):
@@ -288,18 +300,130 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
 
         await asyncio.sleep(ping_interval)
 
+async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
+    proxies = proxies or []
+    proxy_list = proxies if use_proxy else [None]
 
-# Main logic
+    proxy = proxy_list[0] if proxy_list else None
+    browser_id = str(uuid.uuid4())
+
+    account_info = None
+    if not account_info:
+        account_info = await get_account_info(token, proxy=proxy)
+
+        if not account_info:
+            logger.error(f"<red>Account info not found for token: {token[-10:]}</red>")
+            return
+
+    for proxy in proxy_list:
+        try:
+            response = await call_api(DOMAIN_API["SESSION"], {}, token, proxy)
+
+            if response and response.get("code") == 0:
+                account_info = response["data"]
+                log_user_data(account_info)
+
+                await start_ping(token, account_info, proxy, ping_interval, browser_id)
+                return
+
+            logger.warning(f"<yellow>Invalid or no response for token with proxy {proxy}</yellow>")
+        except Exception as e:
+            logger.error(f"<red>Error with proxy {proxy} for token {token[-10:]}: {e}</red>")
+
+    logger.error(f"<red>All attempts failed for token {token[-10:]}</red>")
+
+async def get_total_points(token, ip_score="N/A", proxy=None, name="Unknown"):
+    try:
+        scraper = cloudscraper.create_scraper(browser={"browser": "chrome", "platform": "windows"})
+        url = DOMAIN_API["DEVICE_NETWORK"]
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+            "Origin": "https://app.nodepay.ai",
+            "Referer": "https://app.nodepay.ai/",
+            "Sec-Fetch-Site": "cross-site",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-CH-UA": "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
+            "Sec-CH-UA-Mobile": "?1",
+            "Sec-CH-UA-Platform": "\"Android\""
+        }
+
+        proxies = {"http": proxy, "https": proxy} if proxy else None
+
+        response = scraper.get(url, headers=headers, proxies=proxies, timeout=60)
+
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("success"):
+                total_points = sum(device.get("total_points", 0) for device in data.get("data", []))
+                logger.info(f"<magenta>Earn successfully</magenta>, Total Points: <cyan>{total_points:.2f}</cyan> for user: <magenta>{name}</magenta>")
+                return total_points
+            logger.error(f"<red>Failed to fetch points: {data.get('msg', 'Unknown error')}</red>")
+
+        elif response.status_code == 403:
+            identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
+            logger.error(f"<red>HTTP 403: Access denied. Proxy or token may be blocked.</red> "
+                         f"{ 'Proxy' if proxy else 'IP Address' }: <cyan>{identifier}</cyan>")
+            time.sleep(random.uniform(5, 10))
+
+    except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
+        identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
+        logger.error(f"<red>Error: {str(e)}</red> { 'Proxy' if proxy else 'IP Address' }: <cyan>{identifier}</cyan>")
+    except Exception as e:
+        identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
+        logger.error(f"<red>Unexpected error: {e}</red> { 'Proxy' if proxy else 'IP Address' }: <cyan>{identifier}</cyan>")
+    
+    return 0
+
+async def process_tokens(tokens):
+    await asyncio.gather(*(asyncio.to_thread(dailyclaim, token) for token in tokens))
+
+async def create_tasks(token_proxy_pairs):
+    return [
+        call_api(DOMAIN_API["SESSION"], data={}, token=token, proxy=proxy)
+        for token, proxy in token_proxy_pairs
+    ] + [
+        process_account(token, use_proxy=bool(proxy), proxies=[proxy] if proxy else [], ping_interval=4.0)
+        for token, proxy in token_proxy_pairs
+    ]
+
 async def main():
-    if not (tokens := load_file("token.txt")):
-        return logger.error("<red>No tokens found in 'token.txt'. Exiting.</red>")
+    if not (tokens := load_file("tokens.txt")):
+        return logger.error("<red>No tokens found in 'tokens.txt'. Exiting.</red>")
 
+    proxies = ask_user_for_proxy()
+
+    if not proxies:
+        logger.info("<green>Proceeding without proxies...</green>")
+    else:
+        logger.info("<green>Proceeding with proxies...</green>")
+
+    await process_tokens(tokens)
+    token_proxy_pairs = assign_proxies_to_tokens(tokens, proxies)
 
     users_data = await asyncio.gather(*(get_account_info(token) for token in tokens), return_exceptions=True)
     log_user_data([data for data in users_data if not isinstance(data, Exception)])
 
     logger.info("Waiting before starting tasks...")
-    await asyncio.sleep(5)
+    await asyncio.sleep(11)
+
+    tasks = await create_tasks(token_proxy_pairs)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error(f"<red>Task failed: {result}</red>")
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        print_header()
+        print_file_info()
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Program interrupted. Exiting gracefully...")
+    finally:
+        print("Cleaning up resources before exiting.")
