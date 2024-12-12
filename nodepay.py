@@ -289,7 +289,6 @@ async def main():
     if not proxies:
         logger.info("<green>Proceeding without proxies...</green>")
 
-    await process_tokens(tokens)
     token_proxy_pairs = assign_proxies_to_tokens(tokens, proxies)
 
     users_data = await asyncio.gather(*(get_account_info(token) for token in tokens), return_exceptions=True)
