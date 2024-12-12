@@ -253,19 +253,41 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
 
         try:
             response = await call_api(url, data, token, proxy=proxy, timeout=120)
-            if response:
-                logger.info(f"Ping successful for {name}.")
-                break  # Stop after successful ping.
+            if response and response.get("data"):
+
+                status_connect = CONNECTION_STATES["CONNECTED"]
+                response_data = response["data"]
+                ip_score = response_data.get("ip_score", "N/A")
+                total_points = await get_total_points(token, ip_score=ip_score, proxy=proxy, name=name)
+                total_points = last_valid_points if total_points == 0 and last_valid_points > 0 else total_points
+                last_valid_points = total_points
+
+                identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
+                logger.info(
+                    f"<green>Ping Successfully</green>, Network Quality: <cyan>{ip_score}</cyan>, "
+                    f"{'Proxy' if proxy else 'IP Address'}: <cyan>{identifier}</cyan>")
+                
+                RETRIES = 0
             else:
-                logger.warning(f"Ping failed. Retrying ({RETRIES})...")
+                logger.warning(f"<yellow>Invalid or no response from {url}</yellow>")
+                RETRIES += 1
+
+                if RETRIES >= 3:
+                    logger.error(f"<red>Exceeded retry limit for proxy {proxy}. Aborting.</red>")
+                    break
+
+            url_index = (url_index + 1) % len(DOMAIN_API["PING"])
 
         except Exception as e:
-            logger.warning(f"<red>Ping failed: {e}</red>")            
-            time.sleep(2)
+            logger.error(f"<red>Error during pinging via proxy {proxy}: {e}</red>")
             RETRIES += 1
 
-            if RETRIES > 5:
-                break  # Stop after 5 failed retries
+            if RETRIES >= 3:
+                logger.error(f"<red>Exceeded retry limit for proxy {proxy}. Aborting.</red>")
+                break
+
+        await asyncio.sleep(ping_interval)
+
 
 # Main logic
 async def main():
