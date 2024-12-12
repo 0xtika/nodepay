@@ -229,7 +229,7 @@ async def get_account_info(token, proxy=None):
         logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
     return None
 
-await start_ping(token, account_info, proxy, ping_interval, browser_id=browser_id)
+async def start_ping(token, account_info, proxy, ping_interval, browser_id=None):
     global last_ping_time, RETRIES, status_connect
     browser_id = browser_id or str(uuid.uuid4())
     url_index = 0
@@ -403,7 +403,7 @@ async def main():
     log_user_data([data for data in users_data if not isinstance(data, Exception)])
 
     logger.info("Waiting before starting tasks...")
-    await asyncio.sleep(11)
+    await asyncio.sleep(5)
 
     tasks = await create_tasks(token_proxy_pairs)
     results = await asyncio.gather(*tasks, return_exceptions=True)
