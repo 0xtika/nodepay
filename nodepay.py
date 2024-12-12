@@ -301,10 +301,5 @@ async def main():
     logger.info("Waiting before starting tasks...")
     await asyncio.sleep(5)
 
-
-    for result in requests:
-        if isinstance(result, Exception):
-            logger.error(f"<red>Task failed: {result}</red>")
-
 if __name__ == '__main__':
     asyncio.run(main())
