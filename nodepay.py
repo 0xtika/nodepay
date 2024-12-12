@@ -153,7 +153,7 @@ def dailyclaim(token):
     data = {"mission_id": "1"}
 
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=15)
+        response = requests.post(url, headers=headers, json=data, impersonate="chrome110")
         if response.status_code == 200:
             response_data = response.json()
             if response_data.get('success'):
