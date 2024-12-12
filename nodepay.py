@@ -292,7 +292,7 @@ async def main():
             users_data.append(account_data)
 
     log_user_data(users_data)
-    await asyncio.sleep(5)
+    await asyncio.sleep(10)
 
     # Running daily claim
     for token in tokens:
