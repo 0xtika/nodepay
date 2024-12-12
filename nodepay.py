@@ -35,7 +35,7 @@ CONNECTION_STATES = {
 
 status_connect = CONNECTION_STATES
 account_info = {}
-last_ping_time = {}
+last__time = {}
 token_status = {}
 browser_id = None
 
@@ -222,8 +222,8 @@ async def get_account_info(token, proxy=None):
         logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
     return None
 
-async def start_ping(token, account_info, proxy, ping_interval, browser_id=None):
-    global last_ping_time, RETRIES, status_connect
+async def start_(token, account_info, proxy, _interval, browser_id=None):
+    global last__time, RETRIES, status_connect
     browser_id = browser_id or str(uuid.uuid4())
     url_index = 0
     last_valid_points = 0
@@ -235,13 +235,13 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
         current_time = time.time()
 
         if proxy:
-            last_ping_time[proxy] = current_time
+            last__time[proxy] = current_time
 
-        if not DOMAIN_API["PING"]:
-            logger.error("<red>No PING URLs available in DOMAIN_API['PING'].</red>")
+        if not DOMAIN_API[""]:
+            logger.error("<red>No  URLs available in DOMAIN_API[''].</red>")
             return
 
-        url = DOMAIN_API["PING"][url_index]
+        url = DOMAIN_API[""][url_index]
 
         data = {
             "id": account_info.get("uid"),
@@ -260,7 +260,7 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
                 identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
                 logger.info(
                     f"<green>Ping Successfully</green>, Network Quality: <cyan>{ip_score}</cyan>, "
-                    f"{'Proxy' if proxy else 'IP Address'}: <cyan>{identifier} {users_data}</cyan>")
+                    f"{'Proxy' if proxy else 'IP Address'}: <cyan>{identifier}</cyan>")
                 
                 RETRIES = 0
             else:
