@@ -354,9 +354,9 @@ async def get_total_points(token, ip_score="N/A", proxy=None, name="Unknown"):
 
         elif response.status_code == 403:
             identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
-            logger.error(f"<red>HTTP 403: Access denied. Proxy or token may be blocked.</red> "
+            logger.error(f"<red>HTTP 403: Access denied to {url}. Proxy or token may be blocked.</red> "
                          f"{ 'Proxy' if proxy else 'IP Address' }: <cyan>{identifier}</cyan>")
-            time.sleep(random.uniform(10, 15))
+            time.sleep(random.uniform(5, 10))
 
     except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
         identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
