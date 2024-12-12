@@ -24,7 +24,7 @@ RETRIES = 60
 DOMAIN_API = {
     "SESSION": "http://api.nodepay.ai/api/auth/session",
     "PING": ["https://nw.nodepay.org/api/network/ping"],
-    "DAILY_CLAIM": "https://api.nodepay.org/api/mission/complete-mission"
+    "DAILY_CLAIM": "https://api.nodepay.org/api/mission/complete-mission",
 }
 
 CONNECTION_STATES = {
@@ -35,7 +35,7 @@ CONNECTION_STATES = {
 
 status_connect = CONNECTION_STATES
 account_info = {}
-last__time = {}
+last_ping_time = {}
 token_status = {}
 browser_id = None
 
@@ -60,7 +60,7 @@ def print_header():
     print("\nWelcome to NodepayBot - Automate your tasks effortlessly!")
 
 def print_file_info():
-    tokens = load_file('token.txt')
+    tokens = load_file('tokens.txt')
     proxies = load_file('proxies.txt')
     border = "=" * 40
 
@@ -126,7 +126,7 @@ def log_user_data(users_data):
             logger.error(f"Logging error: {e}")
 
 def dailyclaim(token):
-    tokens = load_file("token.txt")
+    tokens = load_file("tokens.txt")
     if not tokens or token not in tokens:
         return False
 
@@ -191,7 +191,7 @@ async def call_api(url, data, token, proxy=None, timeout=60):
         logger.error(f"Request error during API call to {url}: {e}") if SHOW_REQUEST_ERROR_LOG else None
         if response and response.status_code == 403:
             logger.error("<red>Access denied (HTTP 403). Possible invalid token or blocked IP/proxy.</red>")
-            time.sleep(random.uniform(10, 15))
+            time.sleep(random.uniform(5, 10))
             return None
         elif response and response.status_code == 429:
             retry_after = response.headers.get("Retry-After", "unknown")
@@ -222,8 +222,8 @@ async def get_account_info(token, proxy=None):
         logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
     return None
 
-async def start_(token, account_info, proxy, _interval, browser_id=None):
-    global last__time, RETRIES, status_connect
+async def start_ping(token, account_info, proxy, ping_interval, browser_id=None):
+    global last_ping_time, RETRIES, status_connect
     browser_id = browser_id or str(uuid.uuid4())
     url_index = 0
     last_valid_points = 0
@@ -235,13 +235,13 @@ async def start_(token, account_info, proxy, _interval, browser_id=None):
         current_time = time.time()
 
         if proxy:
-            last__time[proxy] = current_time
+            last_ping_time[proxy] = current_time
 
-        if not DOMAIN_API[""]:
-            logger.error("<red>No  URLs available in DOMAIN_API[''].</red>")
+        if not DOMAIN_API["PING"]:
+            logger.error("<red>No PING URLs available in DOMAIN_API['PING'].</red>")
             return
 
-        url = DOMAIN_API[""][url_index]
+        url = DOMAIN_API["PING"][url_index]
 
         data = {
             "id": account_info.get("uid"),
@@ -314,7 +314,6 @@ async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
             logger.error(f"<red>Error with proxy {proxy} for token {token[-10:]}: {e}</red>")
 
     logger.error(f"<red>All attempts failed for token {token[-10:]}</red>")
-
 async def process_tokens(tokens):
     await asyncio.gather(*(asyncio.to_thread(dailyclaim, token) for token in tokens))
 
@@ -328,8 +327,8 @@ async def create_tasks(token_proxy_pairs):
     ]
 
 async def main():
-    if not (tokens := load_file("token.txt")):
-        return logger.error("<red>No tokens found in 'token.txt'. Exiting.</red>")
+    if not (tokens := load_file("tokens.txt")):
+        return logger.error("<red>No tokens found in 'tokens.txt'. Exiting.</red>")
 
     proxies = ask_user_for_proxy()
 
@@ -356,6 +355,7 @@ async def main():
 
 if __name__ == '__main__':
     try:
+        print_header()
         print_file_info()
         asyncio.run(main())
     except KeyboardInterrupt:
