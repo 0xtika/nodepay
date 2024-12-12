@@ -142,9 +142,6 @@ def dailyclaim(token):
     tokens = load_file("token.txt")
     if not tokens or token not in tokens:
         return False
-
-    proxies = load_file("proxies.txt") if os.path.exists("proxies.txt") else []
-
     url = DOMAIN_API["DAILY_CLAIM"]
     headers = {
         "Authorization": f"Bearer {token}",
@@ -157,20 +154,16 @@ def dailyclaim(token):
 
     try:
         response = requests.post(url, headers=headers, json=data, timeout=15)
-        if response.status_code != 200:
-            logger.info(f"<yellow>Reward Already Claimed!</yellow>")
-            return False
-
-        response_json = response.json()
-        if response_json.get("success"):
-            logger.info(f"<green>Claim Reward Success!</green>")
-            return True
+        if response.status_code == 200:
+            response_data = response.json()
+            if response_data.get('success'):
+                logger.success(f"Token: {truncate_token(token)} | Reward claimed successfully")
+            else:
+                logger.info(f"Token: {truncate_token(token)} | Reward already claimed or another issue occurred")
         else:
-            logger.info(f"<yellow>Reward Already Claimed!</yellow>")
-            return False
-    except Exception as e:
-        logger.error(f"Request failed: {e}") if SHOW_REQUEST_ERROR_LOG else None
-        return False
+            logger.error(f"Token: {truncate_token(token)} | Failed request, HTTP Status: {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        logger.exception(f"Token: {truncate_token(token)} | Request error: {e}")
 
 async def call_api(url, data, token, proxy=None, timeout=60):
     headers = {
