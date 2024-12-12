@@ -13,7 +13,6 @@ from loguru import logger
 from pyfiglet import figlet_format
 from termcolor import colored
 
-
 # Global configuration
 SHOW_REQUEST_ERROR_LOG = False
 
