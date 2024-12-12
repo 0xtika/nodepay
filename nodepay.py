@@ -286,7 +286,8 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
                 logger.error(f"<red>Exceeded retry limit for proxy {proxy}. Aborting.</red>")
                 break
 
-        await asyncio.sleep(ping_interval)
+        # Tambahkan jeda acak 10-15 detik sebelum ping berikutnya
+        await asyncio.sleep(random.uniform(10, 15))
 
 async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
     proxies = proxies or []
