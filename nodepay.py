@@ -1,31 +1,28 @@
 import asyncio
-import json
-import os
-import random
-import sys
 import time
 import uuid
-from urllib.parse import urlparse
-
-import cloudscraper
-import requests
+from datetime import datetime
 from curl_cffi import requests
 from loguru import logger
-from pyfiglet import figlet_format
-from termcolor import colored
+from fake_useragent import UserAgent
+from colorama import Fore, Style, init
+import inquirer  # Thêm thư viện inquirer
 
+# Khởi tạo colorama với autoreset để tự động reset màu sau mỗi print
+init(autoreset=True)
 
-# Global configuration
-SHOW_REQUEST_ERROR_LOG = False
+# Import hàm show_banner từ banner.py
+from utils.banner import show_banner
 
-PING_INTERVAL = 60
-RETRIES = 60
-
+# Các hằng số
+PING_INTERVAL = 60  # Thời gian ping mỗi proxy (giây)
+MAX_RETRIES = 5  # Số lần thử lại tối đa khi ping thất bại
+TOKEN_FILE = 'token.txt'  # Tệp chứa token
+PROXY_FILE = 'proxy.txt'  # Tệp chứa proxy
 DOMAIN_API = {
-    "SESSION": "http://api.nodepay.ai/api/auth/session",
-    "PING": ["https://nw.nodepay.org/api/network/ping"],
-    "DAILY_CLAIM": "https://api.nodepay.org/api/mission/complete-mission",
-    "DEVICE_NETWORK": "https://api.nodepay.org/api/network/device-networks"
+    "SESSION": "https://api.nodepay.org/api/auth/session",
+    "PING": "https://nw.nodepay.org/api/network/ping",
+    "DAILY_CLAIM": "https://api.nodepay.org/api/mission/complete-mission"
 }
 
 CONNECTION_STATES = {
@@ -34,384 +31,520 @@ CONNECTION_STATES = {
     "NONE_CONNECTION": 3
 }
 
-status_connect = CONNECTION_STATES
+# Biến toàn cục
+status_connect = CONNECTION_STATES["NONE_CONNECTION"]
 account_info = {}
 last_ping_time = {}
-token_status = {}
-browser_id = None
+proxy_index = 0  # Chỉ số để vòng quay proxy
+proxy_browser_ids = {}  # Biến để lưu trữ ID trình duyệt và User-Agent cho mỗi proxy
+used_proxies = set()  # Tập hợp các proxy đã được sử dụng
 
-# Setup logger
-logger.remove()
-logger.add(
-    sink=sys.stdout,
-    format="<r>[Nodepay]</r> | <white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
-           "<level>{level: ^7}</level> | <cyan>{line: <3}</cyan> | {message}",
-    colorize=True
-)
-logger = logger.opt(colors=True)
+# Khởi tạo UserAgent một lần để tái sử dụng
+try:
+    ua = UserAgent()
+except Exception as e:
+    logger.error(f"Lỗi khi khởi tạo UserAgent: {e}")
+    ua = None  # Nếu không thể khởi tạo, sẽ sử dụng User-Agent mặc định
 
-def print_header():
-    ascii_art = figlet_format("NodepayBot", font="slant")
-    colored_art = colored(ascii_art, color="cyan")
-    border = "=" * 40
+def uuidv4():
+    return str(uuid.uuid4())
 
-    print(border)
-    print(colored_art)
-    print(colored("by Enukio", color="cyan", attrs=["bold"]))
-    print("\nWelcome to NodepayBot - Automate your tasks effortlessly!")
+def log_message(message, color=Fore.WHITE):
+    """
+    Hàm để in thông báo log với màu sắc và định dạng căn lề.
+    """
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print(color + f"[{timestamp}] {message}" + Style.RESET_ALL)
 
-def print_file_info():
-    tokens = load_file('token.txt')
-    proxies = load_file('proxies.txt')
-    border = "=" * 40
+def valid_resp(resp):
+    if not resp or "code" not in resp or resp["code"] < 0:
+        raise ValueError("Phản hồi không hợp lệ")
+    return resp
 
-    print(border)
-    print(
-        f"\nTokens: {len(tokens)} - Loaded {len(proxies)} proxies"
-        "\nNodepay only supports 3 connections per account. Using too many proxies may cause issues.\n"
-        f"\n{border}"
-    )
-
-def ask_user_for_proxy():
-    while (user_input := input("Do you want to use proxy? (yes/no)? ").strip().lower()) not in ['yes', 'no']:
-        print("Invalid input. Please enter 'yes' or 'no'.")
-
-    print(f"You selected: {'Yes' if user_input == 'yes' else 'No'}, ENJOY!\n")
-
-    if user_input == 'yes':
-        proxies = load_proxies()
-        if not proxies:
-            logger.error("<red>No proxies found in 'proxies.txt'. Please add valid proxies.</red>")
-            return []
-        return proxies
-    else:
-        return []
-
-def load_file(filename, split_lines=True):
+def load_tokens_from_file(filename):
     try:
         with open(filename, 'r') as file:
-            content = file.read()
-            return content.splitlines() if split_lines else content
-    except FileNotFoundError:
-        logger.error(f"<red>File '{filename}' not found. Please ensure it exists.</red>")
-        return []
-
-def load_proxies():
-    return load_file('proxies.txt')
-
-def assign_proxies_to_tokens(tokens, proxies):
-    if proxies is None:
-        proxies = []
-    paired = list(zip(tokens[:len(proxies)], proxies))
-    remaining = [(token, None) for token in tokens[len(proxies):]]
-    return paired + remaining
-
-def extract_proxy_ip(proxy_url):
-    try:
-        return urlparse(proxy_url).hostname
-    except Exception:
-        return "Unknown"
-
-def get_ip_address(proxy=None):
-    try:
-        url = "https://api.ipify.org?format=json"
-        response = cloudscraper.create_scraper().get(url, proxies={"http": proxy, "https": proxy} if proxy else None)
-        return response.json().get("ip", "Unknown") if response.status_code == 200 else "Unknown"
+            tokens = file.read().splitlines()
+        return tokens
     except Exception as e:
-        logger.error(f"<red>Failed to fetch IP address: {e}</red>")
-    return "Unknown"
+        logger.error(f"Không thể tải token: {e}")
+        raise SystemExit("Thoát chương trình do lỗi khi tải token")
 
-def log_user_data(users_data):
-    if not users_data:
-        logger.error("<red>No user data available.</red>")
-        return
-
+def load_proxies(proxy_file):
     try:
-        for user_data in users_data:
-            name = user_data.get("name", "Unknown")
-            balance = user_data.get("balance", {})
-            logger.info(f"User: <green>{name}</green>, "
-                        f"Current Amount: <green>{balance.get('current_amount', 0)}</green>, "
-                        f"Total Collected: <green>{balance.get('total_collected', 0)}</green>")
-
+        with open(proxy_file, 'r') as file:
+            proxies = file.read().splitlines()
+        if len(proxies) < 3:
+            raise ValueError("Danh sách proxy phải có ít nhất 3 proxy.")
+        return proxies
     except Exception as e:
-        if SHOW_REQUEST_ERROR_LOG:
-            logger.error(f"Logging error: {e}")
+        logger.error(f"Không thể tải proxy: {e}")
+        raise SystemExit("Thoát chương trình do lỗi khi tải proxy")
 
-def dailyclaim(token):
-    tokens = load_file("token.txt")
-    if not tokens or token not in tokens:
-        return False
+def dailyclaim(token, proxy_info):
+    """
+    Hàm thực hiện yêu cầu hàng ngày (daily claim) cho một tài khoản thông qua proxy được chỉ định.
+    """
     url = DOMAIN_API["DAILY_CLAIM"]
     headers = {
         "Authorization": f"Bearer {token}",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+        "User-Agent": proxy_info.get('user_agent', "Mozilla/5.0"),
         "Content-Type": "application/json",
         "Origin": "https://app.nodepay.ai",
-        "Referer": "https://app.nodepay.ai/"
+        "Referer": "https://app.nodepay.ai/",
+        "Accept-Language": "vi,en-US;q=0.9,en;q=0.8",
+        "Accept": "*/*",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "cross-site"
     }
-    data = {"mission_id": "1"}
+    data = {
+        "mission_id": "1"
+    }
 
     try:
-        response = requests.post(url, headers=headers, json=data, impersonate="chrome110")
-        if response.status_code == 200:
-            response_data = response.json()
-            if response_data.get('success'):
-                logger.success(f"Token: {truncate_token(token)} | Reward claimed successfully")
-                return True
-        else:
-                logger.info(f"Token: {truncate_token(token)} | Reward already claimed or another issue occurred")
+        response = requests.post(
+            url,
+            headers=headers,
+            json=data,
+            proxies=parse_proxy(proxy_info['proxy']),
+            timeout=15
+        )
+        if response.status_code != 200:
+            log_message("Yêu cầu hàng ngày THẤT BẠI, có thể đã được yêu cầu trước đó?", Fore.RED)
+            return False
+
+        response_json = response.json()
+        if response_json.get("success"):
+            log_message("Yêu cầu hàng ngày THÀNH CÔNG", Fore.GREEN)
             return True
         else:
-            logger.error(f"Token: {truncate_token(token)} | Failed request, HTTP Status: {response.status_code}")
-    except requests.exceptions.RequestException as e:
-        logger.exception(f"Token: {truncate_token(token)} | Request error: {e}")
+            log_message("Yêu cầu hàng ngày THẤT BẠI, có thể đã được yêu cầu trước đó?", Fore.RED)
+            return False
+    except Exception as e:
+        log_message(f"Lỗi trong yêu cầu hàng ngày: {e}", Fore.RED)
+        return False
 
-async def call_api(url, data, token, proxy=None, timeout=60):
+def parse_proxy(proxy_str):
+    """
+    Hàm phân tích định dạng proxy và trả về một dictionary phù hợp với curl_cffi.
+    """
+    if '://' not in proxy_str:
+        proxy_str = f'http://{proxy_str}'
+    
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(proxy_str)
+        
+        proxy_dict = {
+            'http': proxy_str,
+            'https': proxy_str
+        }
+        
+        if parsed.scheme in ['socks4', 'socks5']:
+            proxy_dict['http'] = proxy_str
+            proxy_dict['https'] = proxy_str
+        
+        return proxy_dict
+    except Exception as e:
+        log_message(f"Định dạng proxy không hợp lệ: {proxy_str}. Lỗi: {e}", Fore.RED)
+        return None
+
+def is_valid_proxy(proxy):
+    return parse_proxy(proxy) is not None
+
+def load_session_info(proxy):
+    # Tải thông tin session từ proxy (nếu cần)
+    return {}
+
+def save_session_info(proxy, data):
+    # Lưu thông tin session vào proxy (nếu cần)
+    pass
+
+def save_status(proxy, status):
+    # Lưu trạng thái kết nối của proxy (nếu cần)
+    pass
+
+def handle_logout(proxy):
+    global status_connect, account_info
+    status_connect = CONNECTION_STATES["NONE_CONNECTION"]
+    account_info = {}
+    save_status(proxy, None)
+    log_message(f"Đã đăng xuất và xóa thông tin session cho proxy {proxy}", Fore.RED)
+
+def remove_proxy_from_list(proxy):
+    global all_proxies
+    # Hàm loại bỏ proxy khỏi danh sách (nếu cần)
+    try:
+        all_proxies.remove(proxy)
+        log_message(f"Đã loại bỏ proxy: {proxy}", Fore.YELLOW)
+    except ValueError:
+        log_message(f"Proxy {proxy} không tồn tại trong danh sách.", Fore.YELLOW)
+
+async def get_real_ip(proxy):
+    parsed_proxies = parse_proxy(proxy)
+    if not parsed_proxies:
+        return "N/A"
+    
+    try:
+        response = requests.get(
+            "https://api64.ipify.org/", 
+            proxies=parsed_proxies,
+            timeout=10
+        )
+        return response.text.strip()
+    except Exception as e:
+        log_message(f"Không thể lấy IP thực qua proxy {proxy}: {e}", Fore.RED)
+        return "N/A"
+
+async def call_api(url, data, proxy_info, token):
+    parsed_proxies = parse_proxy(proxy_info['proxy'])
+    if not parsed_proxies:
+        raise ValueError(f"Proxy không hợp lệ: {proxy_info['proxy']}")
+
     headers = {
         "Authorization": f"Bearer {token}",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://app.nodepay.ai/",
-            "Accept": "application/json, text/plain, */*",
-            "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
-            "Sec-Ch-Ua": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "Sec-Ch-Ua-Platform": '"Windows"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "cors-site"
+        "Content-Type": "application/json",
+        "User-Agent": proxy_info.get('user_agent', "Mozilla/5.0"),
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
+        "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "cross-site"
     }
 
-    response = None
-
     try:
-        response = requests.post(url, json=data, headers=headers, impersonate="safari15_5", proxies={"http": proxy, "https": proxy}, timeout=15)
+        response = requests.post(
+            url, 
+            json=data, 
+            headers=headers, 
+            proxies=parsed_proxies,
+            timeout=30,
+            impersonate="safari15_5"
+        )
+
         response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Request error during API call to {url}: {e}") if SHOW_REQUEST_ERROR_LOG else None
-        if response and response.status_code == 403:
-            logger.error("<red>Access denied (HTTP 403). Possible invalid token or blocked IP/proxy.</red>")
-            time.sleep(random.uniform(5, 10))
-            return None
-        elif response and response.status_code == 429:
-            retry_after = response.headers.get("Retry-After", "unknown")
-            logger.warning(f"<yellow>Rate limit hit (HTTP 429). Retry after {retry_after} seconds.</yellow>")
-            time.sleep(int(retry_after) if retry_after != "unknown" else 5)
-        else:
-            logger.error(f"Request failed: {e}")
-
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to decode JSON response from {url}: {e}") if SHOW_REQUEST_ERROR_LOG else None
+        return valid_resp(response.json())
     except Exception as e:
-        logger.error(f"Unexpected error during API call: {e}") if SHOW_REQUEST_ERROR_LOG else None
+        log_message(f"Lỗi khi gọi API tới {url} qua proxy {proxy_info['proxy']}: {e}", Fore.RED)
+        raise ValueError(f"Gọi API tới {url} thất bại")
 
-    return None
-
-async def get_account_info(token, proxy=None):
-    url = DOMAIN_API["SESSION"]
-    try:
-        response = await call_api(url, {}, token, proxy)
-        if response and response.get("code") == 0:
-            data = response["data"]
-            return {
-                "name": data.get("name", "Unknown"),
-                "ip_score": data.get("ip_score", "N/A"),
-                **data
-            }
-    except Exception as e:
-        logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
-    return None
-
-async def start_ping(token, account_info, proxy, ping_interval, browser_id=None):
+async def ping(proxy_info, token):
     global last_ping_time, RETRIES, status_connect
-    browser_id = browser_id or str(uuid.uuid4())
-    url_index = 0
-    last_valid_points = 0
-    name = account_info.get("name", "Unknown")
-    
-    RETRIES = 0
 
-    while True:
-        current_time = time.time()
+    proxy = proxy_info['proxy']
+    current_time = time.time()
 
-        if proxy:
-            last_ping_time[proxy] = current_time
+    if proxy in last_ping_time and (current_time - last_ping_time[proxy]) < PING_INTERVAL:
+        log_message(f"Bỏ qua ping cho proxy {proxy}, chưa đủ thời gian đã trôi qua", Fore.YELLOW)
+        return
 
-        if not DOMAIN_API["PING"]:
-            logger.error("<red>No PING URLs available in DOMAIN_API['PING'].</red>")
-            return
+    last_ping_time[proxy] = current_time
 
-        url = DOMAIN_API["PING"][url_index]
-
+    try:
         data = {
             "id": account_info.get("uid"),
-            "browser_id": browser_id,
+            "browser_id": proxy_browser_ids.get(proxy, {}).get('browser_id', uuidv4()),
             "timestamp": int(time.time()),
             "version": "2.2.7"
         }
 
-        try:
-            response = await call_api(url, data, token, proxy=proxy, timeout=120)
-            if response and response.get("data"):
-
-                status_connect = CONNECTION_STATES["CONNECTED"]
-                response_data = response["data"]
-                ip_score = response_data.get("ip_score", "N/A")
-                total_points = await get_total_points(token, ip_score=ip_score, proxy=proxy, name=name)
-                total_points = last_valid_points if total_points == 0 and last_valid_points > 0 else total_points
-                last_valid_points = total_points
-
-                identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
-                logger.info(
-                    f"<green>Ping Successfully</green>, Network Quality: <cyan>{ip_score}</cyan>, "
-                    f"{'Proxy' if proxy else 'IP Address'}: <cyan>{identifier}</cyan>")
-                
-                RETRIES = 0
-            else:
-                logger.warning(f"<yellow>Invalid or no response from {url}</yellow>")
-                RETRIES += 1
-
-                if RETRIES >= 3:
-                    logger.error(f"<red>Exceeded retry limit for proxy {proxy}. Aborting.</red>")
-                    break
-
-            url_index = (url_index + 1) % len(DOMAIN_API["PING"])
-
-        except Exception as e:
-            logger.error(f"<red>Error during pinging via proxy {proxy}: {e}</red>")
-            RETRIES += 1
-
-            if RETRIES >= 3:
-                logger.error(f"<red>Exceeded retry limit for proxy {proxy}. Aborting.</red>")
-                break
-
-        await asyncio.sleep(ping_interval)
-
-async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
-    proxies = proxies or []
-    proxy_list = proxies if use_proxy else [None]
-
-    proxy = proxy_list[0] if proxy_list else None
-    browser_id = str(uuid.uuid4())
-
-    account_info = None
-    if not account_info:
-        account_info = await get_account_info(token, proxy=proxy)
-
-        if not account_info:
-            logger.error(f"<red>Account info not found for token: {token[-10:]}</red>")
-            return
-
-    for proxy in proxy_list:
-        try:
-            response = await call_api(DOMAIN_API["SESSION"], {}, token, proxy)
-
-            if response and response.get("code") == 0:
-                account_info = response["data"]
-                log_user_data(account_info)
-
-                await start_ping(token, account_info, proxy, ping_interval, browser_id)
-                return
-
-            logger.warning(f"<yellow>Invalid or no response for token with proxy {proxy}</yellow>")
-        except Exception as e:
-            logger.error(f"<red>Error with proxy {proxy} for token {token[-10:]}: {e}</red>")
-
-    logger.error(f"<red>All attempts failed for token {token[-10:]}</red>")
-
-async def get_total_points(token, ip_score="N/A", proxy=None, name="Unknown"):
-    try:
-        scraper = cloudscraper.create_scraper(browser={"browser": "chrome", "platform": "windows"})
-        url = DOMAIN_API["DEVICE_NETWORK"]
-
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "*/*",
-            "Accept-Encoding": "gzip, deflate, br, zstd",
-            "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-            "Origin": "https://app.nodepay.ai",
-            "Referer": "https://app.nodepay.ai/",
-            "Sec-Fetch-Site": "cross-site",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-CH-UA": "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
-            "Sec-CH-UA-Mobile": "?1",
-            "Sec-CH-UA-Platform": "\"Android\""
-        }
-
-        proxies = {"http": proxy, "https": proxy} if proxy else None
-
-        response = scraper.get(url, headers=headers, proxies=proxies, timeout=60)
-
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("success"):
-                total_points = sum(device.get("total_points", 0) for device in data.get("data", []))
-                logger.info(f"<magenta>Earn successfully</magenta>, Total Points: <cyan>{total_points:.2f}</cyan> for user: <magenta>{name}</magenta>")
-                return total_points
-            logger.error(f"<red>Failed to fetch points: {data.get('msg', 'Unknown error')}</red>")
-
-        elif response.status_code == 403:
-            identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
-            logger.error(f"<red>HTTP 403: Access denied. Proxy or token may be blocked.</red> "
-                         f"{ 'Proxy' if proxy else 'IP Address' }: <cyan>{identifier}</cyan>")
-            time.sleep(random.uniform(5, 10))
-
-    except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
-        identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
-        logger.error(f"<red>Error: {str(e)}</red> { 'Proxy' if proxy else 'IP Address' }: <cyan>{identifier}</cyan>")
+        response = await call_api(DOMAIN_API["PING"], data, proxy_info, token)
+        if response["code"] == 0:
+            ip_score = response.get('data', {}).get('ip_score', 'N/A')
+            real_ip = await get_real_ip(proxy)
+            # Căn lề và thêm màu sắc cho từng phần chi tiết
+            log_message(
+                f"Tài khoản: {Fore.LIGHTGREEN_EX}{account_info.get('email', 'N/A'):<25}{Style.RESET_ALL} | " + 
+                f"ID Trình duyệt: {Fore.LIGHTMAGENTA_EX}{proxy_browser_ids.get(proxy, {}).get('browser_id', 'N/A'):<36}{Style.RESET_ALL} | " +
+                f"IP: {Fore.LIGHTYELLOW_EX}{real_ip:<15}{Style.RESET_ALL} | " + 
+                f"Điểm IP: {Fore.LIGHTRED_EX}{ip_score:<5}{Style.RESET_ALL}", 
+                Fore.CYAN
+            )
+            RETRIES = 0
+            status_connect = CONNECTION_STATES["CONNECTED"]
+        else:
+            handle_ping_fail(proxy, response)
     except Exception as e:
-        identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
-        logger.error(f"<red>Unexpected error: {e}</red> { 'Proxy' if proxy else 'IP Address' }: <cyan>{identifier}</cyan>")
+        log_message(f"Ping thất bại qua proxy {proxy}: {e}", Fore.RED)
+        handle_ping_fail(proxy, None)
+
+def handle_ping_fail(proxy, response):
+    global RETRIES
+
+    RETRIES += 1
+    if response and response.get("code") == 403:
+        handle_logout(proxy)
+    if RETRIES >= MAX_RETRIES:
+        log_message(f"Ping thất bại quá nhiều lần cho proxy {proxy}. Đang loại bỏ proxy này.", Fore.RED)
+        remove_proxy_from_list(proxy)
+        RETRIES = 0
+    else:
+        log_message(f"Ping thất bại cho proxy {proxy}. Số lần thử lại: {RETRIES}", Fore.RED)
+
+async def start_ping(proxy_info, token):
+    try:
+        await ping(proxy_info, token)
+    except asyncio.CancelledError:
+        log_message(f"Nhiệm vụ ping cho proxy {proxy_info['proxy']} đã bị hủy", Fore.YELLOW)
+    except Exception as e:
+        log_message(f"Lỗi trong start_ping cho proxy {proxy_info['proxy']}: {e}", Fore.RED)
+
+async def render_profile_info(proxy_info, token):
+    global account_info, proxy_browser_ids
+
+    try:
+        proxy = proxy_info['proxy']
+        if proxy not in proxy_browser_ids:
+            if ua:
+                user_agent = ua.random
+            else:
+                user_agent = "Mozilla/5.0"
+            proxy_browser_ids[proxy] = {
+                'browser_id': uuidv4(),
+                'user_agent': user_agent
+            }
+
+        np_session_info = load_session_info(proxy)
+
+        if not np_session_info:
+            response = await call_api(DOMAIN_API["SESSION"], {}, proxy_info, token)
+            valid_resp(response)
+            account_info = response["data"]
+            if account_info.get("uid"):
+                save_session_info(proxy, account_info)
+                # Thực hiện daily claim sau khi thiết lập session
+                log_message("Đang thực hiện yêu cầu hàng ngày...", Fore.YELLOW)
+                dailyclaim(token, proxy_info)
+                await start_ping(proxy_info, token)
+            else:
+                handle_logout(proxy)
+        else:
+            account_info = np_session_info
+            # Thực hiện daily claim sau khi thiết lập session
+            log_message("Đang thực hiện yêu cầu hàng ngày...", Fore.YELLOW)
+            dailyclaim(token, proxy_info)
+            await start_ping(proxy_info, token)
+    except Exception as e:
+        log_message(f"Lỗi trong render_profile_info cho proxy {proxy}: {e}", Fore.RED)
+        error_message = str(e)
+        if any(phrase in error_message for phrase in [
+            "sent 1011 (internal error) keepalive ping timeout; no close frame received",
+            "500 Internal Server Error"
+        ]):
+            log_message(f"Loại bỏ proxy lỗi khỏi danh sách: {proxy}", Fore.RED)
+            remove_proxy_from_list(proxy)
+            return None
+        else:
+            log_message(f"Lỗi kết nối: {e}", Fore.RED)
+            return proxy_info
+
+async def multi_account_mode(all_tokens, all_proxies, proxies_per_account=3):
+    valid_proxies = [proxy for proxy in all_proxies if is_valid_proxy(proxy)]
+    available_proxies = valid_proxies.copy()  # Danh sách proxy có thể sử dụng
+    token_tasks = []
+
+    for index, token in enumerate(all_tokens, 1):
+        token_proxies = []
+        for _ in range(proxies_per_account):
+            if available_proxies:
+                proxy = available_proxies.pop(0)
+                token_proxies.append({'proxy': proxy})
+                used_proxies.add(proxy)
+            else:
+                break  # Không còn proxy nào để phân phối
+
+        if not token_proxies:
+            log_message(f"Không có proxy nào cho Token {index}", Fore.YELLOW)
+            continue
+
+        proxy_list = [proxy_info['proxy'] for proxy_info in token_proxies]
+        log_message(f"Token {index} với Proxies: {proxy_list}", Fore.BLUE)
+        
+        task = asyncio.create_task(process_token(token, token_proxies, all_proxies, available_proxies, proxies_per_account))
+        token_tasks.append(task)
     
-    return 0
+    if token_tasks:
+        await asyncio.gather(*token_tasks)
 
-async def process_tokens(tokens):
-    await asyncio.gather(*(asyncio.to_thread(dailyclaim, token) for token in tokens))
+async def process_token(token, proxies, all_proxies, available_proxies, proxies_per_account):
+    tasks = {asyncio.create_task(render_profile_info(proxy_info, token)): proxy_info['proxy'] for proxy_info in proxies}
 
-async def create_tasks(token_proxy_pairs):
-    return [
-        call_api(DOMAIN_API["SESSION"], data={}, token=token, proxy=proxy)
-        for token, proxy in token_proxy_pairs
-    ] + [
-        process_account(token, use_proxy=bool(proxy), proxies=[proxy] if proxy else [], ping_interval=4.0)
-        for token, proxy in token_proxy_pairs
-    ]
+    while tasks:
+        done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            failed_proxy = tasks[task]
+            try:
+                result = task.result()
+            except Exception as e:
+                log_message(f"Lỗi task cho proxy {failed_proxy}: {e}", Fore.RED)
+                result = None
+
+            if result is None:
+                log_message(f"Đang loại bỏ proxy lỗi: {failed_proxy}", Fore.YELLOW)
+                proxies = [p for p in proxies if p['proxy'] != failed_proxy]
+                used_proxies.discard(failed_proxy)
+
+                # Thêm proxy mới chưa được chọn vào danh sách
+                available_new_proxies = [p for p in all_proxies if p not in [proxy['proxy'] for proxy in proxies] and p not in used_proxies and is_valid_proxy(p)]
+                if available_new_proxies:
+                    new_proxy = available_new_proxies.pop(0)
+                    proxies.append({'proxy': new_proxy})
+                    used_proxies.add(new_proxy)
+                    new_task = asyncio.create_task(render_profile_info({'proxy': new_proxy}, token))
+                    tasks[new_task] = new_proxy
+                    log_message(f"Đã thay thế bằng proxy mới: {new_proxy}", Fore.GREEN)
+                else:
+                    log_message("Không còn proxy nào để thay thế. Tiếp tục với các proxy live.", Fore.YELLOW)
+            tasks.pop(task)
+
+        for proxy in set([proxy_info['proxy'] for proxy_info in proxies]) - set(tasks.values()):
+            new_task = asyncio.create_task(render_profile_info({'proxy': proxy}, token))
+            tasks[new_task] = proxy
+        
+        await asyncio.sleep(3)
+    
+    await asyncio.sleep(10)
+
+async def single_account_mode(token, all_proxies, proxies_per_account=3):
+    active_proxies = [
+        {'proxy': proxy} for proxy in all_proxies if is_valid_proxy(proxy)][:proxies_per_account]
+    used_proxies.update([proxy_info['proxy'] for proxy_info in active_proxies])
+    tasks = {asyncio.create_task(render_profile_info(proxy_info, token)): proxy_info['proxy'] for proxy_info in active_proxies}
+
+    while tasks:
+        done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            failed_proxy = tasks[task]
+            try:
+                result = task.result()
+            except Exception as e:
+                log_message(f"Lỗi task cho proxy {failed_proxy}: {e}", Fore.RED)
+                result = None
+
+            if result is None:
+                log_message(f"Đang loại bỏ proxy lỗi: {failed_proxy}", Fore.YELLOW)
+                active_proxies = [p for p in active_proxies if p['proxy'] != failed_proxy]
+                used_proxies.discard(failed_proxy)
+
+                # Thêm proxy mới chưa được chọn vào danh sách
+                available_proxies = [p for p in all_proxies if p not in [proxy_info['proxy'] for proxy_info in active_proxies] and p not in used_proxies and is_valid_proxy(p)]
+                if available_proxies:
+                    new_proxy = available_proxies.pop(0)
+                    active_proxies.append({'proxy': new_proxy})
+                    used_proxies.add(new_proxy)
+                    new_task = asyncio.create_task(render_profile_info({'proxy': new_proxy}, token))
+                    tasks[new_task] = new_proxy
+                    log_message(f"Đã thay thế bằng proxy mới: {new_proxy}", Fore.GREEN)
+                else:
+                    log_message("Không còn proxy nào để thay thế. Tiếp tục với các proxy live.", Fore.YELLOW)
+            tasks.pop(task)
+
+        for proxy_info in active_proxies:
+            proxy = proxy_info['proxy']
+            if proxy not in tasks.values():
+                new_task = asyncio.create_task(render_profile_info(proxy_info, token))
+                tasks[new_task] = proxy
+        await asyncio.sleep(3)
+    await asyncio.sleep(10)
 
 async def main():
-    if not (tokens := load_file("token.txt")):
-        return logger.error("<red>No tokens found in 'token.txt'. Exiting.</red>")
+    # Hiển thị logo từ banner.py
+    show_banner()
 
-    proxies = ask_user_for_proxy()
+    log_message("ĐANG CHẠY VỚI PROXIES", Fore.WHITE)
+    
+    # Sử dụng inquirer để tạo menu
+    questions = [
+        inquirer.List(
+            'mode',
+            message="Chọn Chế Độ",
+            choices=['1. Chạy duy nhất 1 tài khoản', '2. Chạy nhiều tài khoản'],
+        )
+    ]
+    answers = inquirer.prompt(questions)
+    mode_choice = answers['mode'] if answers else '1. Chạy duy nhất 1 tài khoản'
+    
+    all_proxies = load_proxies(PROXY_FILE)
+    tokens = load_tokens_from_file(TOKEN_FILE)
 
-    if not proxies:
-        logger.info("<green>Proceeding without proxies...</green>")
+    if mode_choice.startswith('1'):
+        # Chạy duy nhất 1 tài khoản
+        log_message("Chọn Chế Độ: Chạy duy nhất 1 tài khoản", Fore.BLUE)
+        token = input(Fore.LIGHTYELLOW_EX + "Nhập Token Nodepay: ").strip()
+        if not token:
+            log_message("Token không thể để trống. Thoát chương trình.", Fore.RED)
+            exit()
+        
+        # Phân bổ 3 proxy cho tài khoản đơn
+        token_proxies = []
+        global proxy_index
+        for _ in range(3):
+            if proxy_index >= len(all_proxies):
+                proxy_index = 0  # Quay lại đầu danh sách nếu hết proxy
+            proxy = all_proxies[proxy_index]
+            if is_valid_proxy(proxy):
+                token_proxies.append({'proxy': proxy})
+                used_proxies.add(proxy)
+            proxy_index += 1
+
+        if len(token_proxies) < 3:
+            log_message("Không đủ proxy để phân bổ cho tài khoản đơn. Thoát chương trình.", Fore.RED)
+            exit()
+
+        log_message(f"Token duy nhất được phân bổ với Proxies: {[p['proxy'] for p in token_proxies]}", Fore.BLUE)
+        
+        # Thực hiện daily claim cho tài khoản đơn với proxy đầu tiên
+        log_message("Đang thực hiện yêu cầu hàng ngày...", Fore.YELLOW)
+        dailyclaim(token, token_proxies[0])
+        
+        # Khởi chạy ping cho tất cả các proxy của tài khoản
+        await single_account_mode(token, all_proxies)
+    
+    elif mode_choice.startswith('2'):
+        # Chạy nhiều tài khoản
+        log_message("Chọn Chế Độ: Chạy nhiều tài khoản", Fore.BLUE)
+        if not tokens:
+            log_message("Không tìm thấy token nào trong token.txt", Fore.RED)
+            exit()
+        
+        # Phân bổ 3 proxy cho mỗi tài khoản
+        tokens_proxies = {}
+        num_proxies = len(all_proxies)
+        for token in tokens:
+            token_proxies = []
+            for _ in range(3):
+                if proxy_index >= num_proxies:
+                    proxy_index = 0  # Quay lại đầu danh sách nếu hết proxy
+                proxy = all_proxies[proxy_index]
+                if is_valid_proxy(proxy):
+                    token_proxies.append({'proxy': proxy})
+                    used_proxies.add(proxy)
+                proxy_index += 1
+            tokens_proxies[token] = token_proxies
+
+        # Thực hiện daily claim cho từng tài khoản với proxy đầu tiên
+        for token, proxies in tokens_proxies.items():
+            log_message(f"Đang thực hiện yêu cầu hàng ngày cho Token: {Fore.LIGHTGREEN_EX}{token:<25}{Style.RESET_ALL}...", Fore.YELLOW)
+            dailyclaim(token, proxies[0])
+        
+        await multi_account_mode(tokens, all_proxies)
+    
     else:
-        logger.info("<green>Proceeding with proxies...</green>")
-
-    await process_tokens(tokens)
-    token_proxy_pairs = assign_proxies_to_tokens(tokens, proxies)
-
-    users_data = await asyncio.gather(*(get_account_info(token) for token in tokens), return_exceptions=True)
-    log_user_data([data for data in users_data if not isinstance(data, Exception)])
-
-    logger.info("Waiting before starting tasks...")
-    await asyncio.sleep(5)
-
-    tasks = await create_tasks(token_proxy_pairs)
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    for result in results:
-        if isinstance(result, Exception):
-            logger.error(f"<red>Task failed: {result}</red>")
+        log_message("Lựa chọn không hợp lệ. Thoát chương trình.", Fore.RED)
+        exit()
 
 if __name__ == '__main__':
     try:
-        print_file_info()
         asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Program interrupted. Exiting gracefully...")
-    finally:
-        print("Cleaning up resources before exiting.")
+    except (KeyboardInterrupt, SystemExit):
+        log_message("Chương trình đã bị người dùng dừng lại.", Fore.RED)
