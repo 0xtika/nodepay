@@ -455,8 +455,6 @@ async def single_account_mode(token, all_proxies, proxies_per_account=3):
     await asyncio.sleep(10)
 
 async def main():
-    # Hiển thị logo từ banner.py
-    show_banner()
 
     log_message("ĐANG CHẠY VỚI PROXIES", Fore.WHITE)
     
