@@ -156,7 +156,11 @@ def load_session_info():
     return {}  # Return an empty dictionary if no session is saved
 
 def schedule_daily_claim():
-    """Jadwalkan run_daily_claim dari daily.py untuk dijalankan setiap pukul 00:00."""
+    """Jadwalkan run_daily_claim untuk dijalankan segera dan setiap pukul 00:00."""
+    # Jalankan klaim langsung setelah program dimulai
+    run_daily_claim()
+
+    # Jadwalkan klaim untuk dijalankan setiap pukul 00:00
     schedule.every().day.at("00:00").do(run_daily_claim)
     logger.info("Scheduled daily reward claim at 00:00.")
 
