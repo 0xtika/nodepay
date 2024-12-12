@@ -269,34 +269,48 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
 
 # Main logic
 async def main():
-    tokens = load_file('token.txt')
+    # Load tokens from file
+    if not (tokens := load_file("tokens.txt")):
+        return logger.error("<red>No tokens found in 'tokens.txt'. Exiting.</red>")
 
-    # Set default to 'no' (localhost)
-    use_proxy = False  # Default to localhost
+    # Set proxies to None (default behavior: localhost)
+    proxies = []
 
-    if not tokens:
-        logger.error("<red>No tokens found in 'token.txt'. Please add tokens and try again.</red>")
-        return
-
-    proxies = load_proxies() if use_proxy else []
-
-    users_data = []
-    paired_tokens = assign_proxies_to_tokens(tokens, proxies)
-
-    # Skipping the user interaction
+    # Log the behavior we are proceeding with
     logger.info("<yellow>Proceeding with default behavior: no proxy selected.</yellow>")
 
-    for token, proxy in paired_tokens:
-        account_data = await get_account_info(token, proxy)
-        if account_data:
-            users_data.append(account_data)
+    # Perform PING request to check network status before continuing
+    ping_url = "https://nw.nodepay.org/api/network/ping"
+    ping_response = await call_api(ping_url, {}, '', None)  # No token or proxy for PING request
+    if ping_response:
+        logger.info("Successfully pinged the network.")
+    else:
+        logger.error("Failed to ping the network.")
+        return  # Stop execution if ping fails
 
-    log_user_data(users_data)
-    await asyncio.sleep(10)
+    # Process tokens (without asking for user input on proxy)
+    await process_tokens(tokens)
 
-    # Running daily claim
-    for token in tokens:
-        dailyclaim(token)
+    # Assign proxies to tokens (in this case, no proxies are used, so this is effectively skipped)
+    token_proxy_pairs = assign_proxies_to_tokens(tokens, proxies)
+
+    # Fetch account info
+    users_data = await asyncio.gather(*(get_account_info(token) for token in tokens), return_exceptions=True)
+    log_user_data([data for data in users_data if not isinstance(data, Exception)])
+
+    logger.info("Waiting before starting tasks...")
+
+    # Wait before starting the tasks
+    await asyncio.sleep(5)
+
+    # Create tasks and process them
+    tasks = await create_tasks(token_proxy_pairs)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Handle the results and log any errors
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error(f"<red>Task failed: {result}</red>")
 
     logger.info("<green>All tasks completed successfully!</green>")
 
