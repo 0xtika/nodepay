@@ -158,26 +158,49 @@ def dailyclaim(token):
         logger.error(f"Request failed: {e}") if SHOW_REQUEST_ERROR_LOG else None
         return False
 
+async def get_account_info(token, proxy=None):
+    url = DOMAIN_API["SESSION"]
+    try:
+        response = await call_api(url, {}, token, proxy)
+        if response:
+            logger.info(f"<green>Account info for token {token[-10:]}: {response}</green>")
+            if response.get("code") == 0:
+                data = response["data"]
+                return {
+                    "name": data.get("name", "Unknown"),
+                    "ip_score": data.get("ip_score", "N/A"),
+                    **data
+                }
+            else:
+                logger.error(f"<red>Error: {response.get('message', 'No message')}")
+        else:
+            logger.error("<red>No response received from API</red>")
+    except Exception as e:
+        logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
+    return None
+
 async def call_api(url, data, token, proxy=None, timeout=60):
     headers = {
         "Authorization": f"Bearer {token}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://app.nodepay.ai/",
-            "Accept": "application/json, text/plain, */*",
-            "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
-            "Sec-Ch-Ua": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "Sec-Ch-Ua-Platform": '"Windows"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "cors-site"
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://app.nodepay.ai/",
+        "Accept": "application/json, text/plain, */*",
+        "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
+        "Sec-Ch-Ua": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "cors-site"
     }
 
     response = None
 
     try:
-        response = requests.post(url, json=data, headers=headers, impersonate="safari15_5", proxies={"http": proxy, "https": proxy}, timeout=15)
+        logger.info(f"Sending request to {url} with token: {token[-10:]} and proxy: {proxy}")
+        response = requests.post(url, json=data, headers=headers, proxies={"http": proxy, "https": proxy}, timeout=15)
+        logger.info(f"Received response: {response.status_code} {response.text}")
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -198,21 +221,6 @@ async def call_api(url, data, token, proxy=None, timeout=60):
     except Exception as e:
         logger.error(f"Unexpected error during API call: {e}") if SHOW_REQUEST_ERROR_LOG else None
 
-    return None
-
-async def get_account_info(token, proxy=None):
-    url = DOMAIN_API["SESSION"]
-    try:
-        response = await call_api(url, {}, token, proxy)
-        if response and response.get("code") == 0:
-            data = response["data"]
-            return {
-                "name": data.get("name", "Unknown"),
-                "ip_score": data.get("ip_score", "N/A"),
-                **data
-            }
-    except Exception as e:
-        logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
     return None
 
 async def start_ping(token, account_info, proxy, ping_interval, browser_id=None):
