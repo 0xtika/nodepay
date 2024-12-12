@@ -263,8 +263,8 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
 async def main():
     tokens = load_file('token.txt')
 
-    # Set default to 'no' (proxy)
-    use_proxy = False  # Proxy set to False directly
+    # Set default to 'no' (localhost)
+    use_proxy = False  # Default to localhost
 
     if not tokens:
         logger.error("<red>No tokens found in 'token.txt'. Please add tokens and try again.</red>")
