@@ -302,7 +302,7 @@ async def main():
     await asyncio.sleep(5)
 
 
-    for result in results:
+    for result in requests:
         if isinstance(result, Exception):
             logger.error(f"<red>Task failed: {result}</red>")
 
