@@ -1,6 +1,5 @@
 from loguru import logger
 from curl_cffi import requests
-import pyfiglet
 import time
 
 logger.remove()
@@ -12,6 +11,7 @@ logger.add(
     ),
     colorize=True
 )
+
 # Read Tokens and Proxy count
 def read_tokens():
     with open('token.txt', 'r') as file:
@@ -54,7 +54,7 @@ def claim_reward(token):
     except requests.exceptions.RequestException as e:
         logger.exception(f"Token: {truncate_token(token)} | Request error: {e}")
 
-def main():
+def run_daily_claim():
     try:
         with open('token.txt', 'r') as file:
             tokens = file.read().splitlines()
@@ -71,10 +71,4 @@ def main():
         logger.exception(f"An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
-    try:
-        while True:
-            main()
-            logger.info("Waiting 24 hours before the next run, ENJOY!")
-            time.sleep(86400) # 86400s (24h)
-    except (KeyboardInterrupt, SystemExit):
-        logger.info(f"Program terminated by user. ENJOY!\n")
+    run_daily_claim()
