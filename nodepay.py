@@ -1,11 +1,13 @@
-import asyncio 
-import aiohttp 
-import time 
-import uuid 
-from curl_cffi import requests 
-from loguru import logger 
-from colorama import Fore 
+import asyncio
+import aiohttp
+import time
+import uuid
+import schedule
+from curl_cffi import requests
+from loguru import logger
+from colorama import Fore
 from fake_useragent import UserAgent
+from daily import run_daily_claim  # Import fungsi dari daily.py
 
 # Constants
 PING_INTERVAL = 60
@@ -153,6 +155,15 @@ def save_session_info(data):
 def load_session_info():
     return {}  # Return an empty dictionary if no session is saved
 
+def schedule_daily_claim():
+    """Jadwalkan run_daily_claim dari daily.py untuk dijalankan setiap pukul 00:00."""
+    schedule.every().day.at("00:00").do(run_daily_claim)
+    logger.info("Scheduled daily reward claim at 00:00.")
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
 async def main():
     # Load token from token.txt
     try:
@@ -166,6 +177,10 @@ async def main():
     except ValueError as e:
         logger.error(str(e))
         exit()
+
+    # Mulai proses klaim harian dengan penjadwalan
+    logger.info("Starting the daily claim scheduler...")
+    asyncio.create_task(asyncio.to_thread(schedule_daily_claim))  # Penjadwalan klaim harian
 
     while True:
         await render_profile_info(token)
