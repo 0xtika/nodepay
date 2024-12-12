@@ -270,8 +270,8 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
 # Main logic
 async def main():
     # Load tokens from file
-    if not (tokens := load_file("tokens.txt")):
-        return logger.error("<red>No tokens found in 'tokens.txt'. Exiting.</red>")
+    if not (tokens := load_file("token.txt")):
+        return logger.error("<red>No tokens found in 'token.txt'. Exiting.</red>")
 
     # Set proxies to None (default behavior: localhost)
     proxies = []
