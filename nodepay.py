@@ -294,7 +294,7 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
 
         await asyncio.sleep(ping_interval)
 
-async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
+async def process_account(token, use_proxy, proxies=None, ping_interval=10.0):
     proxies = proxies or []
     proxy_list = proxies if use_proxy else [None]
 
