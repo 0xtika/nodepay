@@ -11,9 +11,6 @@ import inquirer  # Thêm thư viện inquirer
 # Khởi tạo colorama với autoreset để tự động reset màu sau mỗi print
 init(autoreset=True)
 
-# Import hàm show_banner từ banner.py
-from utils.banner import show_banner
-
 # Các hằng số
 PING_INTERVAL = 60  # Thời gian ping mỗi proxy (giây)
 MAX_RETRIES = 5  # Số lần thử lại tối đa khi ping thất bại
