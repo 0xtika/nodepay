@@ -60,7 +60,7 @@ def print_header():
     print("\nWelcome to NodepayBot - Automate your tasks effortlessly!")
 
 def print_file_info():
-    tokens = load_file('tokens.txt')
+    tokens = load_file('token.txt')
     proxies = load_file('proxies.txt')
     border = "=" * 40
 
@@ -126,7 +126,7 @@ def log_user_data(users_data):
             logger.error(f"Logging error: {e}")
 
 def dailyclaim(token):
-    tokens = load_file("tokens.txt")
+    tokens = load_file("token.txt")
     if not tokens or token not in tokens:
         return False
 
@@ -327,8 +327,8 @@ async def create_tasks(token_proxy_pairs):
     ]
 
 async def main():
-    if not (tokens := load_file("tokens.txt")):
-        return logger.error("<red>No tokens found in 'tokens.txt'. Exiting.</red>")
+    if not (tokens := load_file("token.txt")):
+        return logger.error("<red>No tokens found in 'token.txt'. Exiting.</red>")
 
     proxies = ask_user_for_proxy()
 
