@@ -301,7 +301,6 @@ async def main():
     logger.info("Waiting before starting tasks...")
     await asyncio.sleep(5)
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     for result in results:
         if isinstance(result, Exception):
