@@ -320,53 +320,6 @@ async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
 
     logger.error(f"<red>All attempts failed for token {token[-10:]}</red>")
 
-async def get_total_points(token, ip_score="N/A", proxy=None, name="Unknown"):
-    try:
-        scraper = cloudscraper.create_scraper(browser={"browser": "chrome", "platform": "windows"})
-        url = DOMAIN_API["DEVICE_NETWORK"]
-
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "*/*",
-            "Accept-Encoding": "gzip, deflate, br, zstd",
-            "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-            "Origin": "https://app.nodepay.ai",
-            "Referer": "https://app.nodepay.ai/",
-            "Sec-Fetch-Site": "cross-site",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-CH-UA": "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
-            "Sec-CH-UA-Mobile": "?1",
-            "Sec-CH-UA-Platform": "\"Android\""
-        }
-
-        proxies = {"http": proxy, "https": proxy} if proxy else None
-
-        response = scraper.get(url, headers=headers, proxies=proxies, timeout=60)
-
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("success"):
-                total_points = sum(device.get("total_points", 0) for device in data.get("data", []))
-                logger.info(f"<magenta>Earn successfully</magenta>, Total Points: <cyan>{total_points:.2f}</cyan> for user: <magenta>{name}</magenta>")
-                return total_points
-            logger.error(f"<red>Failed to fetch points: {data.get('msg', 'Unknown error')}</red>")
-
-        elif response.status_code == 403:
-            identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
-            logger.error(f"<red>HTTP 403: Access denied to {url}. Proxy or token may be blocked.</red> "
-                         f"{ 'Proxy' if proxy else 'IP Address' }: <cyan>{identifier}</cyan>")
-            time.sleep(random.uniform(5, 10))
-
-    except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
-        identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
-        logger.error(f"<red>Error: {str(e)}</red> { 'Proxy' if proxy else 'IP Address' }: <cyan>{identifier}</cyan>")
-    except Exception as e:
-        identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
-        logger.error(f"<red>Unexpected error: {e}</red> { 'Proxy' if proxy else 'IP Address' }: <cyan>{identifier}</cyan>")
-    
-    return 0
-
 async def process_tokens(tokens):
     await asyncio.gather(*(asyncio.to_thread(dailyclaim, token) for token in tokens))
 
