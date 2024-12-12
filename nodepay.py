@@ -1,21 +1,31 @@
 import asyncio
-import aiohttp
+import json
+import os
+import random
+import sys
 import time
 import uuid
-import schedule
+from urllib.parse import urlparse
+
+import cloudscraper
+import requests
 from curl_cffi import requests
 from loguru import logger
-from colorama import Fore
-from fake_useragent import UserAgent
-from daily import run_daily_claim  # Import fungsi dari daily.py
+from pyfiglet import figlet_format
+from termcolor import colored
 
-# Constants
+
+# Global configuration
+SHOW_REQUEST_ERROR_LOG = False
+
 PING_INTERVAL = 60
 RETRIES = 60
 
 DOMAIN_API = {
     "SESSION": "http://api.nodepay.ai/api/auth/session",
-    "PING": "https://nw.nodepay.org/api/network/ping"
+    "PING": ["https://nw.nodepay.org/api/network/ping"],
+    "DAILY_CLAIM": "https://api.nodepay.org/api/mission/complete-mission",
+    "DEVICE_NETWORK": "https://api.nodepay.org/api/network/device-networks"
 }
 
 CONNECTION_STATES = {
@@ -24,94 +34,228 @@ CONNECTION_STATES = {
     "NONE_CONNECTION": 3
 }
 
-status_connect = CONNECTION_STATES["NONE_CONNECTION"]
-browser_id = None
+status_connect = CONNECTION_STATES
 account_info = {}
 last_ping_time = {}
+token_status = {}
+browser_id = None
 
-def uuidv4():
-    return str(uuid.uuid4())
+# Setup logger
+logger.remove()
+logger.add(
+    sink=sys.stdout,
+    format="<r>[Nodepay]</r> | <white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
+           "<level>{level: ^7}</level> | <cyan>{line: <3}</cyan> | {message}",
+    colorize=True
+)
+logger = logger.opt(colors=True)
 
-def valid_resp(resp):
-    if not resp or "code" not in resp or resp["code"] < 0:
-        raise ValueError("Invalid response")
-    return resp
+def print_header():
+    ascii_art = figlet_format("NodepayBot", font="slant")
+    colored_art = colored(ascii_art, color="cyan")
+    border = "=" * 40
 
-async def render_profile_info(token):
-    global browser_id, account_info
+    print(border)
+    print(colored_art)
+    print(colored("by Enukio", color="cyan", attrs=["bold"]))
+    print("\nWelcome to NodepayBot - Automate your tasks effortlessly!")
+
+def print_file_info():
+    tokens = load_file('tokens.txt')
+    proxies = load_file('proxies.txt')
+    border = "=" * 40
+
+    print(border)
+    print(
+        f"\nTokens: {len(tokens)} - Loaded {len(proxies)} proxies"
+        "\nNodepay only supports 3 connections per account. Using too many proxies may cause issues.\n"
+        f"\n{border}"
+    )
+
+def ask_user_for_proxy():
+    while (user_input := input("Do you want to use proxy? (yes/no)? ").strip().lower()) not in ['yes', 'no']:
+        print("Invalid input. Please enter 'yes' or 'no'.")
+
+    print(f"You selected: {'Yes' if user_input == 'yes' else 'No'}, ENJOY!\n")
+
+    if user_input == 'yes':
+        proxies = load_proxies()
+        if not proxies:
+            logger.error("<red>No proxies found in 'proxies.txt'. Please add valid proxies.</red>")
+            return []
+        return proxies
+    else:
+        return []
+
+def load_file(filename, split_lines=True):
+    try:
+        with open(filename, 'r') as file:
+            content = file.read()
+            return content.splitlines() if split_lines else content
+    except FileNotFoundError:
+        logger.error(f"<red>File '{filename}' not found. Please ensure it exists.</red>")
+        return []
+
+def load_proxies():
+    return load_file('proxies.txt')
+
+def assign_proxies_to_tokens(tokens, proxies):
+    if proxies is None:
+        proxies = []
+    paired = list(zip(tokens[:len(proxies)], proxies))
+    remaining = [(token, None) for token in tokens[len(proxies):]]
+    return paired + remaining
+
+def extract_proxy_ip(proxy_url):
+    try:
+        return urlparse(proxy_url).hostname
+    except Exception:
+        return "Unknown"
+
+def get_ip_address(proxy=None):
+    try:
+        url = "https://api.ipify.org?format=json"
+        response = cloudscraper.create_scraper().get(url, proxies={"http": proxy, "https": proxy} if proxy else None)
+        return response.json().get("ip", "Unknown") if response.status_code == 200 else "Unknown"
+    except Exception as e:
+        logger.error(f"<red>Failed to fetch IP address: {e}</red>")
+    return "Unknown"
+
+def log_user_data(users_data):
+    if not users_data:
+        logger.error("<red>No user data available.</red>")
+        return
 
     try:
-        np_session_info = load_session_info()
+        for user_data in users_data:
+            name = user_data.get("name", "Unknown")
+            balance = user_data.get("balance", {})
+            logger.info(f"User: <green>{name}</green>, "
+                        f"Current Amount: <green>{balance.get('current_amount', 0)}</green>, "
+                        f"Total Collected: <green>{balance.get('total_collected', 0)}</green>")
 
-        if not np_session_info:
-            # Generate new browser_id
-            browser_id = uuidv4()
-            response = await call_api(DOMAIN_API["SESSION"], {}, token)
-            valid_resp(response)
-            account_info = response["data"]
-            if account_info.get("uid"):
-                save_session_info(account_info)
-                await start_ping(token)
-            else:
-                handle_logout()
-        else:
-            account_info = np_session_info
-            await start_ping(token)
     except Exception as e:
-        logger.error(f"Error in render_profile_info: {e}")
-        error_message = str(e)
-        if any(phrase in error_message for phrase in [
-            "sent 1011 (internal error) keepalive ping timeout; no close frame received",
-            "500 Internal Server Error"
-        ]):
-            logger.info("Removing error account info due to invalid response.")
-            handle_logout()
-        else:
-            logger.error(f"Connection error: {e}")
+        if SHOW_REQUEST_ERROR_LOG:
+            logger.error(f"Logging error: {e}")
 
-async def call_api(url, data, token):
-    user_agent = UserAgent(os=['windows', 'macos', 'linux'], browsers='chrome')
-    random_user_agent = user_agent.random
+def dailyclaim(token):
+    tokens = load_file("tokens.txt")
+    if not tokens or token not in tokens:
+        return False
+
+    proxies = load_file("proxies.txt") if os.path.exists("proxies.txt") else []
+
+    url = DOMAIN_API["DAILY_CLAIM"]
     headers = {
         "Authorization": f"Bearer {token}",
-        "User-Agent": random_user_agent,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Content-Type": "application/json",
-        "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
-        "Accept": "application/json",
+        "Origin": "https://app.nodepay.ai",
+        "Referer": "https://app.nodepay.ai/",
         "Accept-Language": "en-US,en;q=0.5",
+        "Accept": "*/*",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1"
+    }
+    data = {
+        "mission_id": "1"
     }
 
     try:
-        response = requests.post(url, json=data, headers=headers, impersonate="chrome110", timeout=30)
+        response = requests.post(url, headers=headers, json=data, timeout=15)
+        if response.status_code != 200:
+            logger.info(f"<yellow>Reward Already Claimed!</yellow>")
+            return False
 
+        response_json = response.json()
+        if response_json.get("success"):
+            logger.info(f"<green>Claim Reward Success!</green>")
+            return True
+        else:
+            logger.info(f"<yellow>Reward Already Claimed!</yellow>")
+            return False
+    except Exception as e:
+        logger.error(f"Request failed: {e}") if SHOW_REQUEST_ERROR_LOG else None
+        return False
+
+async def call_api(url, data, token, proxy=None, timeout=60):
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://app.nodepay.ai/",
+            "Accept": "application/json, text/plain, */*",
+            "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
+            "Sec-Ch-Ua": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cors-site"
+    }
+
+    response = None
+
+    try:
+        response = requests.post(url, json=data, headers=headers, impersonate="safari15_5", proxies={"http": proxy, "https": proxy}, timeout=15)
         response.raise_for_status()
-        return valid_resp(response.json())
-    except Exception as e:
-        logger.error(f"Error during API call: {e}")
-        raise ValueError(f"Failed API call to {url}")
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request error during API call to {url}: {e}") if SHOW_REQUEST_ERROR_LOG else None
+        if response and response.status_code == 403:
+            logger.error("<red>Access denied (HTTP 403). Possible invalid token or blocked IP/proxy.</red>")
+            time.sleep(random.uniform(5, 10))
+            return None
+        elif response and response.status_code == 429:
+            retry_after = response.headers.get("Retry-After", "unknown")
+            logger.warning(f"<yellow>Rate limit hit (HTTP 429). Retry after {retry_after} seconds.</yellow>")
+            time.sleep(int(retry_after) if retry_after != "unknown" else 5)
+        else:
+            logger.error(f"Request failed: {e}")
 
-async def start_ping(token):
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to decode JSON response from {url}: {e}") if SHOW_REQUEST_ERROR_LOG else None
+    except Exception as e:
+        logger.error(f"Unexpected error during API call: {e}") if SHOW_REQUEST_ERROR_LOG else None
+
+    return None
+
+async def get_account_info(token, proxy=None):
+    url = DOMAIN_API["SESSION"]
     try:
-        while True:
-            await ping(token)
-            await asyncio.sleep(PING_INTERVAL)
-    except asyncio.CancelledError:
-        logger.info(f"Ping task was cancelled")
+        response = await call_api(url, {}, token, proxy)
+        if response and response.get("code") == 0:
+            data = response["data"]
+            return {
+                "name": data.get("name", "Unknown"),
+                "ip_score": data.get("ip_score", "N/A"),
+                **data
+            }
     except Exception as e:
-        logger.error(f"Error in start_ping: {e}")
+        logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
+    return None
 
-async def ping(token):
+async def start_ping(token, account_info, proxy, ping_interval, browser_id=None):
     global last_ping_time, RETRIES, status_connect
+    browser_id = browser_id or str(uuid.uuid4())
+    url_index = 0
+    last_valid_points = 0
+    name = account_info.get("name", "Unknown")
+    
+    RETRIES = 0
 
-    current_time = time.time()
+    while True:
+        current_time = time.time()
 
-    if "last_ping_time" in last_ping_time and (current_time - last_ping_time["last_ping_time"]) < PING_INTERVAL:
-        logger.info("Skipping ping, not enough time elapsed")
-        return
+        if proxy:
+            last_ping_time[proxy] = current_time
 
-    last_ping_time["last_ping_time"] = current_time
+        if not DOMAIN_API["PING"]:
+            logger.error("<red>No PING URLs available in DOMAIN_API['PING'].</red>")
+            return
 
-    try:
+        url = DOMAIN_API["PING"][url_index]
+
         data = {
             "id": account_info.get("uid"),
             "browser_id": browser_id,
@@ -119,75 +263,167 @@ async def ping(token):
             "version": "2.2.7"
         }
 
-        response = await call_api(DOMAIN_API["PING"], data, token)
-        if response["code"] == 0:
-            logger.info(f"Ping successful: {response}")
-            RETRIES = 0
-            status_connect = CONNECTION_STATES["CONNECTED"]
-        else:
-            handle_ping_fail(response)
-    except Exception as e:
-        logger.error(f"Ping failed: {e}")
-        handle_ping_fail(None)
+        try:
+            response = await call_api(url, data, token, proxy=proxy, timeout=120)
+            if response and response.get("data"):
 
-def handle_ping_fail(response):
-    global RETRIES, status_connect
+                status_connect = CONNECTION_STATES["CONNECTED"]
+                response_data = response["data"]
+                ip_score = response_data.get("ip_score", "N/A")
+                total_points = await get_total_points(token, ip_score=ip_score, proxy=proxy, name=name)
+                total_points = last_valid_points if total_points == 0 and last_valid_points > 0 else total_points
+                last_valid_points = total_points
 
-    RETRIES += 1
-    if response and response.get("code") == 403:
-        handle_logout()
-    elif RETRIES < 2:
-        status_connect = CONNECTION_STATES["DISCONNECTED"]
-    else:
-        status_connect = CONNECTION_STATES["DISCONNECTED"]
+                identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
+                logger.info(
+                    f"<green>Ping Successfully</green>, Network Quality: <cyan>{ip_score}</cyan>, "
+                    f"{'Proxy' if proxy else 'IP Address'}: <cyan>{identifier}</cyan>")
+                
+                RETRIES = 0
+            else:
+                logger.warning(f"<yellow>Invalid or no response from {url}</yellow>")
+                RETRIES += 1
 
-def handle_logout():
-    global status_connect, account_info
+                if RETRIES >= 3:
+                    logger.error(f"<red>Exceeded retry limit for proxy {proxy}. Aborting.</red>")
+                    break
 
-    status_connect = CONNECTION_STATES["NONE_CONNECTION"]
-    account_info = {}
-    logger.info("Logged out and cleared session info.")
+            url_index = (url_index + 1) % len(DOMAIN_API["PING"])
 
-def save_session_info(data):
-    # Saving session info (this could be to a file or a database)
-    pass
+        except Exception as e:
+            logger.error(f"<red>Error during pinging via proxy {proxy}: {e}</red>")
+            RETRIES += 1
 
-def load_session_info():
-    return {}  # Return an empty dictionary if no session is saved
+            if RETRIES >= 3:
+                logger.error(f"<red>Exceeded retry limit for proxy {proxy}. Aborting.</red>")
+                break
 
-def schedule_daily_claim():
-    run_daily_claim()
-    schedule.every().day.at("08:00").do(run_daily_claim)
-    logger.info("Scheduled daily reward claim at 08:00.")
+        await asyncio.sleep(ping_interval)
 
+async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
+    proxies = proxies or []
+    proxy_list = proxies if use_proxy else [None]
+
+    proxy = proxy_list[0] if proxy_list else None
+    browser_id = str(uuid.uuid4())
+
+    account_info = None
+    if not account_info:
+        account_info = await get_account_info(token, proxy=proxy)
+
+        if not account_info:
+            logger.error(f"<red>Account info not found for token: {token[-10:]}</red>")
+            return
+
+    for proxy in proxy_list:
+        try:
+            response = await call_api(DOMAIN_API["SESSION"], {}, token, proxy)
+
+            if response and response.get("code") == 0:
+                account_info = response["data"]
+                log_user_data(account_info)
+
+                await start_ping(token, account_info, proxy, ping_interval, browser_id)
+                return
+
+            logger.warning(f"<yellow>Invalid or no response for token with proxy {proxy}</yellow>")
+        except Exception as e:
+            logger.error(f"<red>Error with proxy {proxy} for token {token[-10:]}: {e}</red>")
+
+    logger.error(f"<red>All attempts failed for token {token[-10:]}</red>")
+
+async def get_total_points(token, ip_score="N/A", proxy=None, name="Unknown"):
     try:
-        while True:
-            schedule.run_pending()
-            time.sleep(1)
-    except KeyboardInterrupt:
-        logger.info("Program terminated by user.")
-        exit(0) 
+        scraper = cloudscraper.create_scraper(browser={"browser": "chrome", "platform": "windows"})
+        url = DOMAIN_API["DEVICE_NETWORK"]
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+            "Origin": "https://app.nodepay.ai",
+            "Referer": "https://app.nodepay.ai/",
+            "Sec-Fetch-Site": "cross-site",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-CH-UA": "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
+            "Sec-CH-UA-Mobile": "?1",
+            "Sec-CH-UA-Platform": "\"Android\""
+        }
+
+        proxies = {"http": proxy, "https": proxy} if proxy else None
+
+        response = scraper.get(url, headers=headers, proxies=proxies, timeout=60)
+
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("success"):
+                total_points = sum(device.get("total_points", 0) for device in data.get("data", []))
+                logger.info(f"<magenta>Earn successfully</magenta>, Total Points: <cyan>{total_points:.2f}</cyan> for user: <magenta>{name}</magenta>")
+                return total_points
+            logger.error(f"<red>Failed to fetch points: {data.get('msg', 'Unknown error')}</red>")
+
+        elif response.status_code == 403:
+            identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
+            logger.error(f"<red>HTTP 403: Access denied. Proxy or token may be blocked.</red> "
+                         f"{ 'Proxy' if proxy else 'IP Address' }: <cyan>{identifier}</cyan>")
+            time.sleep(random.uniform(5, 10))
+
+    except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
+        identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
+        logger.error(f"<red>Error: {str(e)}</red> { 'Proxy' if proxy else 'IP Address' }: <cyan>{identifier}</cyan>")
+    except Exception as e:
+        identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
+        logger.error(f"<red>Unexpected error: {e}</red> { 'Proxy' if proxy else 'IP Address' }: <cyan>{identifier}</cyan>")
+    
+    return 0
+
+async def process_tokens(tokens):
+    await asyncio.gather(*(asyncio.to_thread(dailyclaim, token) for token in tokens))
+
+async def create_tasks(token_proxy_pairs):
+    return [
+        call_api(DOMAIN_API["SESSION"], data={}, token=token, proxy=proxy)
+        for token, proxy in token_proxy_pairs
+    ] + [
+        process_account(token, use_proxy=bool(proxy), proxies=[proxy] if proxy else [], ping_interval=4.0)
+        for token, proxy in token_proxy_pairs
+    ]
 
 async def main():
-    try:
-        with open("token.txt", "r") as file:
-            token = file.read().strip()
-        if not token:
-            raise ValueError("Token file is empty.")
-    except FileNotFoundError:
-        logger.error("Token file 'token.txt' not found. Please create the file and add your token.")
-        exit()
-    except ValueError as e:
-        logger.error(str(e))
-        exit()
-    asyncio.create_task(asyncio.to_thread(schedule_daily_claim))
+    if not (tokens := load_file("tokens.txt")):
+        return logger.error("<red>No tokens found in 'tokens.txt'. Exiting.</red>")
 
-    while True:
-        await render_profile_info(token)
-        await asyncio.sleep(3)
+    proxies = ask_user_for_proxy()
+
+    if not proxies:
+        logger.info("<green>Proceeding without proxies...</green>")
+    else:
+        logger.info("<green>Proceeding with proxies...</green>")
+
+    await process_tokens(tokens)
+    token_proxy_pairs = assign_proxies_to_tokens(tokens, proxies)
+
+    users_data = await asyncio.gather(*(get_account_info(token) for token in tokens), return_exceptions=True)
+    log_user_data([data for data in users_data if not isinstance(data, Exception)])
+
+    logger.info("Waiting before starting tasks...")
+    await asyncio.sleep(5)
+
+    tasks = await create_tasks(token_proxy_pairs)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error(f"<red>Task failed: {result}</red>")
 
 if __name__ == '__main__':
     try:
+        print_header()
+        print_file_info()
         asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Program terminated by user.")
+    except KeyboardInterrupt:
+        print("Program interrupted. Exiting gracefully...")
+    finally:
+        print("Cleaning up resources before exiting.")
