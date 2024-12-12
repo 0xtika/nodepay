@@ -73,18 +73,6 @@ def print_file_info():
     )
 
 def ask_user_for_proxy():
-    while (user_input := input("Do you want to use proxy? (yes/no)? ").strip().lower()) not in ['yes', 'no']:
-        print("Invalid input. Please enter 'yes' or 'no'.")
-
-    print(f"You selected: {'Yes' if user_input == 'yes' else 'No'}, ENJOY!\n")
-
-    if user_input == 'yes':
-        proxies = load_proxies()
-        if not proxies:
-            logger.error("<red>No proxies found in 'proxies.txt'. Please add valid proxies.</red>")
-            return []
-        return proxies
-    else:
         return []
 
 def load_file(filename, split_lines=True):
