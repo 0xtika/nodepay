@@ -13,6 +13,7 @@ from loguru import logger
 from pyfiglet import figlet_format
 from termcolor import colored
 
+
 # Global configuration
 SHOW_REQUEST_ERROR_LOG = False
 
@@ -244,71 +245,51 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
 
         try:
             response = await call_api(url, data, token, proxy=proxy, timeout=120)
-            if response and response.get("data"):
-
-                status_connect = CONNECTION_STATES["CONNECTED"]
-                response_data = response["data"]
-                ip_score = response_data.get("ip_score", "N/A")
-                total_points = await get_total_points(token, ip_score=ip_score, proxy=proxy, name=name)
-                total_points = last_valid_points if total_points == 0 and last_valid_points > 0 else total_points
-                last_valid_points = total_points
-
-                identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
-                logger.info(
-                    f"<green>Ping Successfully</green>, Network Quality: <cyan>{ip_score}</cyan>, "
-                    f"{'Proxy' if proxy else 'IP Address'}: <cyan>{identifier}</cyan>")
-                
-                RETRIES = 0
+            if response:
+                logger.info(f"Ping successful for {name}.")
+                break  # Stop after successful ping.
             else:
-                logger.warning(f"<yellow>Invalid or no response from {url}</yellow>")
-                RETRIES += 1
+                logger.warning(f"Ping failed. Retrying ({RETRIES})...")
 
-                if RETRIES >= 3:
-                    status_connect = CONNECTION_STATES["DISCONNECTED"]
-                    logger.error(f"<red>Max retries reached. Attempting reconnect in {PING_INTERVAL} seconds.</red>")
-                    await asyncio.sleep(PING_INTERVAL)
-
-                continue
         except Exception as e:
-            logger.error(f"<red>Ping request failed: {e}</red>")
+            logger.warning(f"<red>Ping failed: {e}</red>")            
+            time.sleep(2)
             RETRIES += 1
-            if RETRIES >= 3:
-                status_connect = CONNECTION_STATES["DISCONNECTED"]
-                logger.error(f"<red>Max retries reached. Attempting reconnect in {PING_INTERVAL} seconds.</red>")
-                await asyncio.sleep(PING_INTERVAL)
 
-        await asyncio.sleep(PING_INTERVAL)
+            if RETRIES > 5:
+                break  # Stop after 5 failed retries
 
+# Main logic
 async def main():
-    if not (tokens := load_file("token.txt")):
-        return logger.error("<red>No tokens found in 'token.txt'. Exiting.</red>")
+    tokens = load_file('token.txt')
 
-    proxies = []  # Langsung tidak menggunakan proxy, seperti memilih 'no' secara default
+    # Set default to 'no' (proxy)
+    use_proxy = False  # Proxy set to False directly
 
-    if not proxies:
-        logger.info("<green>Proceeding without proxies...</green>")
+    if not tokens:
+        logger.error("<red>No tokens found in 'token.txt'. Please add tokens and try again.</red>")
+        return
 
-    token_proxy_pairs = assign_proxies_to_tokens(tokens, proxies)
+    proxies = load_proxies() if use_proxy else []
 
-    users_data = await asyncio.gather(*(get_account_info(token) for token in tokens), return_exceptions=True)
-    log_user_data([data for data in users_data if not isinstance(data, Exception)])
+    users_data = []
+    paired_tokens = assign_proxies_to_tokens(tokens, proxies)
 
-    logger.info("Waiting before starting tasks...")
-    await asyncio.sleep(5)
+    # Skipping the user interaction
+    logger.info("<yellow>Proceeding with default behavior: no proxy selected.</yellow>")
 
-    tasks = await create_tasks(token_proxy_pairs)
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    for token, proxy in paired_tokens:
+        account_data = await get_account_info(token, proxy)
+        if account_data:
+            users_data.append(account_data)
 
-    for result in results:
-        if isinstance(result, Exception):
-            logger.error(f"<red>Task failed: {result}</red>")
+    log_user_data(users_data)
 
-if __name__ == '__main__':
-    try:
-        print_header()
-        print_file_info()
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Program interrupted. Exiting gracefully...")
-    finally:
-        print("Cleaning up resources before exiting.")
+    # Running daily claim
+    for token in tokens:
+        dailyclaim(token)
+
+    logger.info("<green>All tasks completed successfully!</green>")
+
+if __name__ == "__main__":
+    asyncio.run(main())
