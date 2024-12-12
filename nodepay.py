@@ -260,7 +260,7 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
                 identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
                 logger.info(
                     f"<green>Ping Successfully</green>, Network Quality: <cyan>{ip_score}</cyan>, "
-                    f"{'Proxy' if proxy else 'IP Address'}: <cyan>{identifier}</cyan>")
+                    f"{'Proxy' if proxy else 'IP Address'}: <cyan>{identifier} {users_data}</cyan>")
                 
                 RETRIES = 0
             else:
