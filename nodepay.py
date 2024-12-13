@@ -6,14 +6,15 @@ import sys
 import time
 import uuid
 from urllib.parse import urlparse
-
+import schedule
 import cloudscraper
 import requests
 from curl_cffi import requests
 from loguru import logger
 from pyfiglet import figlet_format
 from termcolor import colored
-
+from daily import run_daily_claim
+from fake_useragent import UserAgent
 
 # Global configuration
 SHOW_REQUEST_ERROR_LOG = False
@@ -296,7 +297,18 @@ async def create_tasks(token_proxy_pairs):
         process_account(token, use_proxy=bool(proxy), proxies=[proxy] if proxy else [], ping_interval=30.0)
         for token, proxy in token_proxy_pairs
     ]
+def schedule_daily_claim():
+    run_daily_claim()
+    schedule.every().day.at("08:00").do(run_daily_claim)
+    logger.info("Scheduled daily reward claim at 08:00.")
 
+    try:
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("Program terminated by user.")
+        exit(0)
 async def main():
     if not (tokens := load_file("token.txt")):
         return logger.error("<red>No tokens found in 'token.txt'. Exiting.</red>")
@@ -308,7 +320,7 @@ async def main():
     else:
         logger.info("<green>Proceeding with proxies...</green>")
     token_proxy_pairs = assign_proxies_to_tokens(tokens, proxies)
-
+    asyncio.create_task(asyncio.to_thread(schedule_daily_claim))
     users_data = await asyncio.gather(*(get_account_info(token) for token in tokens), return_exceptions=True)
     log_user_data([data for data in users_data if not isinstance(data, Exception)])
 
