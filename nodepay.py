@@ -48,17 +48,6 @@ logger.add(
     colorize=True
 )
 logger = logger.opt(colors=True)
-
-def print_header():
-    ascii_art = figlet_format("NodepayBot", font="slant")
-    colored_art = colored(ascii_art, color="cyan")
-    border = "=" * 40
-
-    print(border)
-    print(colored_art)
-    print(colored("by Enukio", color="cyan", attrs=["bold"]))
-    print("\nWelcome to NodepayBot - Automate your tasks effortlessly!")
-
 def print_file_info():
     tokens = load_file('token.txt')
     proxies = load_file('proxies.txt')
@@ -341,7 +330,6 @@ async def main():
 
 if __name__ == '__main__':
     try:
-        print_header()
         print_file_info()
         asyncio.run(main())
     except KeyboardInterrupt:
