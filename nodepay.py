@@ -296,7 +296,7 @@ async def create_tasks(token_proxy_pairs):
         call_api(DOMAIN_API["SESSION"], data={}, token=token, proxy=proxy)
         for token, proxy in token_proxy_pairs
     ] + [
-        process_account(token, use_proxy=bool(proxy), proxies=[proxy] if proxy else [], ping_interval=10.0)
+        process_account(token, use_proxy=bool(proxy), proxies=[proxy] if proxy else [], ping_interval=30.0)
         for token, proxy in token_proxy_pairs
     ]
 
