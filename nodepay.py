@@ -261,26 +261,7 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
                 logger.info(
                     f"<green>Ping Successfully</green>, Network Quality: <cyan>{ip_score}</cyan>, "
                     f"{'Proxy' if proxy else 'IP Address'}: <cyan>{identifier}</cyan>")
-                
-                RETRIES = 0
-            else:
-                logger.warning(f"<yellow>Invalid or no response from {url}</yellow>")
-                RETRIES += 1
-
-                if RETRIES >= 3:
-                    logger.error(f"<red>Exceeded retry limit for proxy {proxy}. Aborting.</red>")
-                    break
-
             url_index = (url_index + 1) % len(DOMAIN_API["PING"])
-
-        except Exception as e:
-            logger.error(f"<red>Error during pinging via proxy {proxy}: {e}</red>")
-            RETRIES += 1
-
-            if RETRIES >= 3:
-                logger.error(f"<red>Exceeded retry limit for proxy {proxy}. Aborting.</red>")
-                break
-
         await asyncio.sleep(ping_interval)
 
 async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
