@@ -51,17 +51,6 @@ logger.add(
 logger = logger.opt(colors=True)
 def truncate_token(token):
     return f"{token[:4]}--{token[-4:]}"
-def print_file_info():
-    tokens = load_file('token.txt')
-    proxies = load_file('proxy.txt')
-    border = "=" * 40
-
-    print(border)
-    print(
-        f"\nTokens: {len(tokens)} - Loaded {len(proxies)} proxies"
-        "\nNodepay only supports 3 connections per account. Using too many proxies may cause issues.\n"
-        f"\n{border}"
-    )
 
 def ask_user_for_proxy():
         return []
@@ -117,45 +106,6 @@ def log_user_data(users_data):
         if SHOW_REQUEST_ERROR_LOG:
             logger.error(f"Logging error: {e}")
 
-def dailyclaim(token):
-    tokens = load_file("token.txt")
-    if not tokens or token not in tokens:
-        return False
-
-    proxies = load_file("proxy.txt") if os.path.exists("proxy.txt") else []
-
-    url = DOMAIN_API["DAILY_CLAIM"]
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-        "Content-Type": "application/json",
-        "Origin": "https://app.nodepay.ai",
-        "Referer": "https://app.nodepay.ai/",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Accept": "*/*",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1"
-    }
-    data = {
-        "mission_id": "1"
-    }
-
-    try:
-        response = requests.post(url, headers=headers, json=data, timeout=15)
-        if response.status_code != 200:
-            logger.info(f"<yellow>Reward Already Claimed!</yellow>")
-            return False
-
-        response_json = response.json()
-        if response_json.get("success"):
-            logger.info(f"<green>Claim Reward Success!</green>")
-            return True
-        else:
-            logger.info(f"<yellow>Reward Already Claimed!</yellow>")
-            return False
-    except Exception as e:
-        logger.error(f"Request failed: {e}") if SHOW_REQUEST_ERROR_LOG else None
-        return False
 
 async def call_api(url, data, token, proxy=None, timeout=60):
     headers = {
@@ -318,7 +268,7 @@ async def main():
     proxies = ask_user_for_proxy()
 
     if not proxies:
-        logger.info("<green>Proceeding without proxies...</green>")
+        logger.info("<green>Processing...</green>")
     else:
         logger.info("<green>Proceeding with proxies...</green>")
     token_proxy_pairs = assign_proxies_to_tokens(tokens, proxies)
