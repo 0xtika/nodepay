@@ -43,7 +43,7 @@ browser_id = None
 logger.remove()
 logger.add(
     sink=sys.stdout,
-    format="<r>[Nodepay]</r> | <white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
+    format="<r>[Nodepay]</r> | <white>DATE: {time:YYYY-MM-DD}</white> | <white>TIME: {time:HH:mm:ss}</white> | "
            "<level>{level: ^7}</level> | <cyan>{line: <3}</cyan> | {message}",
     colorize=True
 )
