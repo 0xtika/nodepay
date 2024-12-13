@@ -49,6 +49,8 @@ logger.add(
     colorize=True
 )
 logger = logger.opt(colors=True)
+def truncate_token(token):
+    return f"{token[:4]}--{token[-4:]}"
 def print_file_info():
     tokens = load_file('token.txt')
     proxies = load_file('proxies.txt')
@@ -246,7 +248,7 @@ async def start_ping(token, account_info, proxy, ping_interval=60.0, browser_id=
                 ip_score = response_data.get("ip_score", "N/A")
                 identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
                 logger.info(
-                    f"<green>PING SUCCESSFULL</green> | NETWORK QUALITY: <cyan>{ip_score}</cyan> | IP ADDRESS: <cyan>{identifier}</cyan>")
+                    f"<green>PING SUCCESSFULL</green> | NETWORK QUALITY: <cyan>{ip_score}</cyan> | IP ADDRESS: <cyan>{identifier}</cyan> | TOKEN: {truncate_token(token)}")
 
             else:
                 logger.warning(f"<yellow>Invalid or no response from {url}</yellow>")
