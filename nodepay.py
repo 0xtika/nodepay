@@ -255,7 +255,7 @@ async def start_ping(token, account_info, proxy, ping_interval=30, browser_id=No
         except Exception as e:
             logger.error(f"<red>Error during pinging via proxy {proxy}: {e}</red>")
 
-        await asyncio.sleep(ping_interval)
+        await asyncio.sleep(ping_interval=30)
 
 async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
     proxies = proxies or []
@@ -280,7 +280,7 @@ async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
                 account_info = response["data"]
                 log_user_data(account_info)
 
-                await start_ping(token, account_info, proxy, ping_interval, browser_id)
+                await start_ping(token, account_info, proxy, ping_interval=30, browser_id)
                 return
 
             logger.warning(f"<yellow>Invalid or no response for token with proxy {proxy}</yellow>")
