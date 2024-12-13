@@ -53,7 +53,7 @@ def truncate_token(token):
     return f"{token[:4]}--{token[-4:]}"
 def print_file_info():
     tokens = load_file('token.txt')
-    proxies = load_file('proxies.txt')
+    proxies = load_file('proxy.txt')
     border = "=" * 40
 
     print(border)
@@ -76,7 +76,7 @@ def load_file(filename, split_lines=True):
         return []
 
 def load_proxies():
-    return load_file('proxies.txt')
+    return load_file('proxy.txt')
 
 def assign_proxies_to_tokens(tokens, proxies):
     if proxies is None:
@@ -122,7 +122,7 @@ def dailyclaim(token):
     if not tokens or token not in tokens:
         return False
 
-    proxies = load_file("proxies.txt") if os.path.exists("proxies.txt") else []
+    proxies = load_file("proxy.txt") if os.path.exists("proxy.txt") else []
 
     url = DOMAIN_API["DAILY_CLAIM"]
     headers = {
