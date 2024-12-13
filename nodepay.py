@@ -245,8 +245,8 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
                 ip_score = response_data.get("ip_score", "N/A")
                 identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
                 logger.info(
-                    f"<green>Ping Successfully</green>, Network Quality: <cyan>{ip_score}</cyan>, "
-                    f"{'Proxy' if proxy else 'IP Address'}: <cyan>{identifier}</cyan>")
+                    f"<green>PING SUCCESSFULL</green> | NETWORK QUALITY: <cyan>{ip_score}</cyan>" |
+                    f"{'Proxy' if proxy else 'IP ADDRESSs'}: <cyan>{identifier}</cyan>")
 
             else:
                 logger.warning(f"<yellow>Invalid or no response from {url}</yellow>")
