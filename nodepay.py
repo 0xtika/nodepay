@@ -255,7 +255,7 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
         except Exception as e:
             logger.error(f"<red>Error during pinging via proxy {proxy}: {e}</red>")
 
-        await asyncio.sleep(ping_interval=30)
+        await asyncio.sleep(ping_interval)
 
 async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
     proxies = proxies or []
