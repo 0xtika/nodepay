@@ -288,9 +288,6 @@ async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
             logger.error(f"<red>Error with proxy {proxy} for token {token[-10:]}: {e}</red>")
 
     logger.error(f"<red>All attempts failed for token {token[-10:]}</red>")
-async def process_tokens(tokens):
-    await asyncio.gather(*(asyncio.to_thread(dailyclaim, token) for token in tokens))
-
 async def create_tasks(token_proxy_pairs):
     return [
         call_api(DOMAIN_API["SESSION"], data={}, token=token, proxy=proxy)
@@ -310,8 +307,6 @@ async def main():
         logger.info("<green>Proceeding without proxies...</green>")
     else:
         logger.info("<green>Proceeding with proxies...</green>")
-
-    await process_tokens(tokens)
     token_proxy_pairs = assign_proxies_to_tokens(tokens, proxies)
 
     users_data = await asyncio.gather(*(get_account_info(token) for token in tokens), return_exceptions=True)
