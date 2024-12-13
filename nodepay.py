@@ -223,13 +223,10 @@ async def get_account_info(token, proxy=None):
     return None
 
 async def start_ping(token, account_info, proxy, ping_interval, browser_id=None):
-    global last_ping_time, RETRIES, status_connect
+    global last_ping_time, status_connect
     browser_id = browser_id or str(uuid.uuid4())
     url_index = 0
-    last_valid_points = 0
     name = account_info.get("name", "Unknown")
-    
-    RETRIES = 0
 
     while True:
         current_time = time.time()
@@ -261,7 +258,15 @@ async def start_ping(token, account_info, proxy, ping_interval, browser_id=None)
                 logger.info(
                     f"<green>Ping Successfully</green>, Network Quality: <cyan>{ip_score}</cyan>, "
                     f"{'Proxy' if proxy else 'IP Address'}: <cyan>{identifier}</cyan>")
+
+            else:
+                logger.warning(f"<yellow>Invalid or no response from {url}</yellow>")
+
             url_index = (url_index + 1) % len(DOMAIN_API["PING"])
+
+        except Exception as e:
+            logger.error(f"<red>Error during pinging via proxy {proxy}: {e}</red>")
+
         await asyncio.sleep(ping_interval)
 
 async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
