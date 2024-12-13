@@ -211,7 +211,7 @@ async def get_account_info(token, proxy=None):
         logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
     return None
 
-async def start_ping(token, account_info, proxy, ping_interval=60, browser_id=None):
+async def start_ping(token, account_info, proxy, ping_interval, browser_id=None):
     global last_ping_time, status_connect
     browser_id = browser_id or str(uuid.uuid4())
     url_index = 0
@@ -280,7 +280,7 @@ async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
                 account_info = response["data"]
                 log_user_data(account_info)
 
-                await start_ping(token, account_info, proxy, ping_interval=30, browser_id)
+                await start_ping(token, account_info, proxy, ping_interval, browser_id)
                 return
 
             logger.warning(f"<yellow>Invalid or no response for token with proxy {proxy}</yellow>")
