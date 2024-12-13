@@ -338,7 +338,6 @@ async def main():
 
 if __name__ == '__main__':
     try:
-        print_file_info()
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Program interrupted. Exiting gracefully...")
