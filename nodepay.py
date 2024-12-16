@@ -251,8 +251,8 @@ async def create_tasks(token_proxy_pairs):
     ]
 def schedule_daily_claim():
     run_daily_claim()
-    schedule.every().day.at("08:00").do(run_daily_claim)
-    logger.info("Scheduled daily reward claim at 08:00.")
+    schedule.every().day.at("20:00").do(run_daily_claim)
+    logger.info("Scheduled daily reward claim at 20:00.")
 
     try:
         while True:
