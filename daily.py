@@ -40,19 +40,26 @@ def claim_reward(token):
     }
     data = {"mission_id": "1"}
 
-    try:
-        response = requests.post(url, headers=headers, json=data, impersonate="chrome110")
+    while True:
+        try:
+            response = requests.post(url, headers=headers, json=data, impersonate="chrome110")
 
-        if response.status_code == 200:
-            response_data = response.json()
-            if response_data.get('success'):
-                logger.success(f"Token: {truncate_token(token)} | Reward claimed successfully")
+            if response.status_code == 200:
+                response_data = response.json()
+                if response_data.get('success'):
+                    logger.success(f"Token: {truncate_token(token)} | Reward claimed successfully")
+                else:
+                    logger.info(f"Token: {truncate_token(token)} | Reward already claimed or another issue occurred")
+                break  # Exit loop if successful
+            elif response.status_code == 403:
+                logger.warning(f"Token: {truncate_token(token)} | Received HTTP 403. Retrying in 5 minutes...")
+                time.sleep(300)  # Wait for 5 minutes before retrying
             else:
-                logger.info(f"Token: {truncate_token(token)} | Reward already claimed or another issue occurred")
-        else:
-            logger.error(f"Token: {truncate_token(token)} | Failed request, HTTP Status: {response.status_code}")
-    except requests.exceptions.RequestException as e:
-        logger.exception(f"Token: {truncate_token(token)} | Request error: {e}")
+                logger.error(f"Token: {truncate_token(token)} | Failed request, HTTP Status: {response.status_code}")
+                break
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Token: {truncate_token(token)} | Request error: {e}")
+            break
 
 def run_daily_claim():
     try:
