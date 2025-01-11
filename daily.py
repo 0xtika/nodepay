@@ -4,15 +4,11 @@ import time
 
 logger.remove()
 logger.add(
-    sink=lambda msg: print(msg, end=''),
-    format=(
-        "<green>{time:DD/MM/YY HH:mm:ss}</green> | "
-        "<level>{level:8} | {message}</level>"
-    ),
+    sink=sys.stdout,
+    format="<r>[Nodepay]</r> | <white>DATE: {time:YYYY-MM-DD}</white> | <white>TIME: {time:HH:mm:ss}</white> | "
+           "<level>{level: ^7}</level> | <cyan>{line: <3}</cyan> | {message}",
     colorize=True
 )
-
-# Read Tokens and Proxy count
 def read_tokens():
     with open('token.txt', 'r') as file:
         tokens_content = sum(1 for line in file)
@@ -33,7 +29,7 @@ def claim_reward(token):
     url = "https://api.nodepay.org/api/mission/complete-mission"
     headers = {
         "Authorization": f"Bearer {token}",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Content-Type": "application/json",
         "Origin": "https://app.nodepay.ai",
         "Referer": "https://app.nodepay.ai/"
@@ -42,7 +38,7 @@ def claim_reward(token):
 
     while True:
         try:
-            response = requests.post(url, headers=headers, json=data, impersonate="chrome110")
+            response = requests.post(url, headers=headers, json=data, impersonate="safari15_5")
 
             if response.status_code == 200:
                 response_data = response.json()
