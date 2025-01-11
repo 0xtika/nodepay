@@ -6,7 +6,7 @@ import sys
 logger.remove()
 logger.add(
     sink=sys.stdout,
-    format="<r>[Nodepay]</r> | <white>DATE: {time:YYYY-MM-DD}</white> | <white>TIME: {time:HH:mm:ss}</white> | <cyan>Request Status: {response.status_code}</cyan> | "
+    format="<r>[Nodepay]</r> | <white>DATE: {time:YYYY-MM-DD}</white> | <white>TIME: {time:HH:mm:ss}</white> |"
            "<level>{level: ^7}</level> | <cyan>{line: <3}</cyan> | {message}",
     colorize=True
 )
@@ -50,11 +50,11 @@ def post_survey_challenge5(token):
         if response.status_code == 200:
             response_data = response.json()
             if response_data.get('success'):
-                logger.success(f"Token: {truncate_token(token)} | Survey challenge completed successfully")
+                logger.success(f"Token: {truncate_token(token)} | Survey challenge completed successfully | Request Status: {response.status_code} ")
             else:
-                logger.info(f"Token: {truncate_token(token)} | Survey challenge already completed or issue occurred | HTTP Status: {response.status_code}")
+                logger.info(f"Token: {truncate_token(token)} | Survey challenge already completed or issue occurred | Request Status: {response.status_code}")
         else:
-            logger.error(f"Token: {truncate_token(token)} | HTTP Status: {response.status_code} | Response: {response.text}")
+            logger.error(f"Token: {truncate_token(token)} | Request Status: {response.status_code} | Response: {response.text}")
     except requests.exceptions.RequestException as e:
         logger.exception(f"Token: {truncate_token(token)} | Request error: {e}")
 
