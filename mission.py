@@ -64,7 +64,6 @@ def run_mission():
             tokens = file.read().splitlines()
 
         for token in tokens:
-            get_survey_challenge5(token)
             post_survey_challenge5(token)
 
         # Send a final message after all operations are done
