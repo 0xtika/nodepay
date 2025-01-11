@@ -6,7 +6,8 @@ import sys
 logger.remove()
 logger.add(
     sink=sys.stdout,
-    format="<r>[Nodepay]</r> | <white>DATE: {time:YYYY-MM-DD}</white> | <white>TIME: {time:HH:mm:ss}</white> | " "<level>{level: ^7}</level> | <cyan>Request Status: {response.status_code}</cyan> | <cyan>{line: <3}</cyan> | {message}",
+    format="<r>[Nodepay]</r> | <white>DATE: {time:YYYY-MM-DD}</white> | <white>TIME: {time:HH:mm:ss}</white> | "
+           "<level>{level: ^7}</level> | <cyan>Request Status: {response.status_code}</cyan> | <cyan>{line: <3}</cyan> | {message}",
     colorize=True
 )
 def read_tokens():
