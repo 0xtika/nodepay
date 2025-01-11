@@ -46,7 +46,7 @@ def claim_reward(token):
                 if response_data.get('success'):
                     logger.success(f"Token: {truncate_token(token)} | Reward claimed successfully")
                 else:
-                    logger.info(f"Token: {truncate_token(token)} | Reward already claimed or another issue occurred")
+                    logger.info(f"Token: {truncate_token(token)} | Reward already claimed or another issue occurred | Request Status: {response.status_code}")
                 break  # Exit loop if successful
             elif response.status_code == 403:
                 logger.warning(f"Token: {truncate_token(token)} | Received HTTP 403. Retrying in 5 minutes...")
