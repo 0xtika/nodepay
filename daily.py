@@ -1,6 +1,7 @@
 from loguru import logger
 from curl_cffi import requests
 import time
+import sys
 
 logger.remove()
 logger.add(
