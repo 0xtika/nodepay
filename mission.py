@@ -98,7 +98,7 @@ def run_mission():
             claim_mission(token)
 
         # Send a final message after all operations are done
-        logger.success(f"All tokens processed. Daily claim operation completed.")
+        logger.success(f"All tokens processed")
 
     except FileNotFoundError:
         logger.error(f"The file 'token.txt' was not found. Please make sure it exists.")
