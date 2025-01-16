@@ -71,7 +71,7 @@ def claim_mission(token):
         "Sec-Fetch-Site": "cross-site",
     }
     data = {
-        ""mission_id":"24",
+        "mission_id":"24",
     }
 
     try:
@@ -80,9 +80,9 @@ def claim_mission(token):
         if response.status_code == 200:
             response_data = response.json()
             if response_data.get('success'):
-                logger.success(f"Token: {truncate_token(token)} | Survey challenge completed successfully | Request Status: {response.status_code} ")
+                logger.success(f"Token: {truncate_token(token)} | Claim Mission successfully | Request Status: {response.status_code} ")
             else:
-                logger.info(f"Token: {truncate_token(token)} | Survey challenge already completed or issue occurred | Request Status: {response.status_code}")
+                logger.info(f"Token: {truncate_token(token)} | Claim mission already completed or issue occurred | Request Status: {response.status_code}")
         else:
             logger.error(f"Token: {truncate_token(token)} | Request Status: {response.status_code} | Response: {response.text}")
     except requests.exceptions.RequestException as e:
