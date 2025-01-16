@@ -58,6 +58,36 @@ def post_survey_challenge5(token):
     except requests.exceptions.RequestException as e:
         logger.exception(f"Token: {truncate_token(token)} | Request error: {e}")
 
+def claim_mission(token):
+    url = "https://api.nodepay.org/api/mission/complete-mission"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+        "Content-Type": "application/json",
+        "Origin": "https://app.nodepay.ai",
+        "Referer": "https://app.nodepay.ai/",
+        "Accept": "*/*",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "cross-site",
+    }
+    data = {
+        ""mission_id":"24",
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=data, impersonate="safari15_5")
+
+        if response.status_code == 200:
+            response_data = response.json()
+            if response_data.get('success'):
+                logger.success(f"Token: {truncate_token(token)} | Survey challenge completed successfully | Request Status: {response.status_code} ")
+            else:
+                logger.info(f"Token: {truncate_token(token)} | Survey challenge already completed or issue occurred | Request Status: {response.status_code}")
+        else:
+            logger.error(f"Token: {truncate_token(token)} | Request Status: {response.status_code} | Response: {response.text}")
+    except requests.exceptions.RequestException as e:
+        logger.exception(f"Token: {truncate_token(token)} | Request error: {e}")
+
 def run_mission():
     try:
         with open('token.txt', 'r') as file:
@@ -65,6 +95,7 @@ def run_mission():
 
         for token in tokens:
             post_survey_challenge5(token)
+            claim_mission(token)
 
         # Send a final message after all operations are done
         logger.success(f"All tokens processed. Daily claim operation completed.")
