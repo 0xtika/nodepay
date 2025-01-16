@@ -26,7 +26,7 @@ def truncate_token(token):
     return f"{token[:4]}--{token[-4:]}"
 
 def post_survey_challenge5(token):
-    url = "https://api.nodepay.org/api/mission/survey/qna-challenge-5"
+    url = "https://api.nodepay.org/api/mission/survey/qna-challenge-6"
     headers = {
         "Authorization": f"Bearer {token}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
@@ -39,8 +39,8 @@ def post_survey_challenge5(token):
     }
     data = {
         "search_completed": True,
-        "top_ranked_url": "https://www.nodepay.ai",
-        "rank_position": 9,
+        "top_ranked_url": "https://www.okx.com/learn/nodepay-airdrop-participate",
+        "rank_position": 1,
         "page_scrolled": True
     }
 
