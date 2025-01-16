@@ -26,7 +26,7 @@ def truncate_token(token):
     return f"{token[:4]}--{token[-4:]}"
 
 def post_survey_challenge5(token):
-    url = "https://api.nodepay.org/api/mission/survey/qna-challenge-6"
+    url = "https://api.nodepay.org/api/mission/survey/qna-challenge-3"
     headers = {
         "Authorization": f"Bearer {token}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
@@ -38,10 +38,16 @@ def post_survey_challenge5(token):
         "Sec-Fetch-Site": "cross-site",
     }
     data = {
-        "search_completed": True,
-        "top_ranked_url": "https://www.okx.com/learn/nodepay-airdrop-participate",
-        "rank_position": 1,
-        "page_scrolled": True
+        "search_tool": ["X", "DISCORD", "TELEGRAM"],
+        "verification_frequency": "A_FEW_TIMES_PER_WEEK",
+        "research_type": "NEWS_AND_UPDATES",
+        "search_frustration": "HARD_TO_VERIFY_CURRENCY",
+        "real_time_importance": "EXTREMELY_IMPORTANT",
+        "switch_feature": ["TOKEN_UNLOCK_ALERTS", "SMART_CONTRACT_VERIFICATION", "SCAM_CHECK"],
+        "verification_step": "check the smart contract and project info",
+        "time_sensitive_info": ["TEAM_UPDATES", "PRICE_MOVEMENTS", "COMMUNITY_SENTIMENT"],
+        "result_format": "DETAILED_ANALYSIS",
+        "ideal_search_tool": "More detailed about team info and project"
     }
 
     try:
@@ -71,7 +77,7 @@ def claim_mission(token):
         "Sec-Fetch-Site": "cross-site",
     }
     data = {
-        "mission_id":"24",
+        "mission_id":"21",
     }
 
     try:
