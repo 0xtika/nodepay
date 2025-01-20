@@ -77,7 +77,7 @@ def claim_mission(token):
         "Sec-Fetch-Site": "cross-site",
     }
     data = {
-        "mission_id":"21",
+        "mission_id":"25",
     }
 
     try:
@@ -100,7 +100,6 @@ def run_mission():
             tokens = file.read().splitlines()
 
         for token in tokens:
-            post_survey_challenge5(token)
             claim_mission(token)
 
         # Send a final message after all operations are done
