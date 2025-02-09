@@ -38,19 +38,46 @@ def load_file(filename):
 def ask_user_for_proxy():
     return []  # Tidak menggunakan proxy secara default
 
-async def call_api(url, data, token, proxy=None):
+async def call_api(url, data, token, proxy=None, timeout=60):
     headers = {
         "Authorization": f"Bearer {token}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://app.nodepay.ai/",
+            "Accept": "application/json, text/plain, */*",
+            "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
+            "Sec-Ch-Ua": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cors-site"
     }
 
+    response = None
+
     try:
-        response = requests.post(url, json=data, headers=headers, proxies={"http": proxy, "https": proxy}, timeout=15)
+        response = requests.post(url, json=data, headers=headers, impersonate="safari15_5", proxies={"http": proxy, "https": proxy}, timeout=15)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        logger.error(f"Request error to {url}: {e}")
+        logger.error(f"Request error during API call to {url}: {e}") if SHOW_REQUEST_ERROR_LOG else None
+        if response and response.status_code == 403:
+            logger.error("<red>Access denied (HTTP 403). Possible invalid token or blocked IP/proxy.</red>")
+            time.sleep(random.uniform(60, 65))
+            return None
+        elif response and response.status_code == 429:
+            retry_after = response.headers.get("Retry-After", "unknown")
+            logger.warning(f"<yellow>Rate limit hit (HTTP 429). Retry after {retry_after} seconds.</yellow>")
+            time.sleep(int(retry_after) if retry_after != "unknown" else 5)
+        else:
+            logger.error(f"Request failed: {e}")
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to decode JSON response from {url}: {e}") if SHOW_REQUEST_ERROR_LOG else None
+    except Exception as e:
+        logger.error(f"Unexpected error during API call: {e}") if SHOW_REQUEST_ERROR_LOG else None
+
     return None
 
 async def get_account_info(token, proxy=None):
