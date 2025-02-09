@@ -12,10 +12,26 @@ from fake_useragent import UserAgent
 # Global configuration
 SHOW_REQUEST_ERROR_LOG = False
 
+PING_INTERVAL = 60
+RETRIES = 60
+
 DOMAIN_API = {
     "SESSION": "http://api.nodepay.ai/api/auth/session",
     "PING": ["https://nw.nodepay.org/api/network/ping"],
+    "DAILY_CLAIM": "https://api.nodepay.org/api/mission/complete-mission",
 }
+
+CONNECTION_STATES = {
+    "CONNECTED": 1,
+    "DISCONNECTED": 2,
+    "NONE_CONNECTION": 3
+}
+
+status_connect = CONNECTION_STATES
+account_info = {}
+last_ping_time = {}
+token_status = {}
+browser_id = None
 
 # Setup logger
 logger.remove()
@@ -26,18 +42,36 @@ logger.add(
     colorize=True
 )
 logger = logger.opt(colors=True)
+def truncate_token(token):
+    return f"{token[:4]}--{token[-4:]}"
 
-def load_file(filename):
+def ask_user_for_proxy():
+        return []
+
+def load_file(filename, split_lines=True):
     try:
         with open(filename, 'r') as file:
-            return file.read().splitlines()
+            content = file.read()
+            return content.splitlines() if split_lines else content
     except FileNotFoundError:
         logger.error(f"<red>File '{filename}' not found. Please ensure it exists.</red>")
         return []
 
-def ask_user_for_proxy():
-    return []  # Tidak menggunakan proxy secara default
+def load_proxies():
+    return load_file('proxy.txt')
 
+def assign_proxies_to_tokens(tokens, proxies):
+    if proxies is None:
+        proxies = []
+    paired = list(zip(tokens[:len(proxies)], proxies))
+    remaining = [(token, None) for token in tokens[len(proxies):]]
+    return paired + remaining
+
+def extract_proxy_ip(proxy_url):
+    try:
+        return urlparse(proxy_url).hostname
+    except Exception:
+        return "Unknown"
 def get_ip_address(proxy=None):
     try:
         url = "https://api.ipify.org?format=json"
