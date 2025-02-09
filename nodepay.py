@@ -45,6 +45,7 @@ logger.add(
            "<level>{level: ^7}</level> | <cyan>{line: <3}</cyan> | {message}",
     colorize=True
 )
+logger.add("log.txt", rotation="10 MB", level="INFO", encoding="utf-8")
 logger = logger.opt(colors=True)
 
 def truncate_token(token):
