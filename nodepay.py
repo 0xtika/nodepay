@@ -82,9 +82,17 @@ async def call_api(url, data, token, proxy=None, timeout=60):
 
 async def get_account_info(token, proxy=None):
     url = DOMAIN_API["SESSION"]
-    response = await call_api(url, {}, token, proxy)
-    if response and response.get("code") == 0:
-        return response["data"]
+    try:
+        response = await call_api(url, {}, token, proxy)
+        if response and response.get("code") == 0:
+            data = response["data"]
+            return {
+                "name": data.get("name", "Unknown"),
+                "ip_score": data.get("ip_score", "N/A"),
+                **data
+            }
+    except Exception as e:
+        logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
     return None
 
 async def start_ping(token, account_info, proxy):
