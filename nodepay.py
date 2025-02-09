@@ -164,39 +164,51 @@ async def get_account_info(token, proxy=None):
         logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
     return None
 
-async def start_ping(token, account_info, proxy, browser_id=None):
+async def start_ping(token, account_info, proxy, ping_interval=60.0, browser_id=None):
     global last_ping_time, status_connect
     browser_id = browser_id or str(uuid.uuid4())
-    url_index = 0  # Ambil URL pertama dari daftar
+    url_index = 0
+    name = account_info.get("name", "Unknown")
 
-    if not DOMAIN_API["PING"]:
-        logger.error("<red>No PING URLs available in DOMAIN_API['PING'].</red>")
-        return
+    while True:
+        current_time = time.time()
 
-    url = DOMAIN_API["PING"][url_index]  # Ambil URL pertama
+        if proxy:
+            last_ping_time[proxy] = current_time
 
-    data = {
-        "id": account_info.get("uid"),
-        "browser_id": browser_id,
-        "timestamp": int(time.time()),
-        "version": "2.2.7"
-    }
+        if not DOMAIN_API["PING"]:
+            logger.error("<red>No PING URLs available in DOMAIN_API['PING'].</red>")
+            return
 
-    try:
-        response = await call_api(url, data, token, proxy=proxy, timeout=120)
-        if response and response.get("data"):
-            status_connect = CONNECTION_STATES["CONNECTED"]
-            response_data = response["data"]
-            ip_score = response_data.get("ip_score", "N/A")
-            identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
-            logger.info(
-                f"<green>PING SUCCESSFULL</green> | NETWORK QUALITY: <cyan>{ip_score}</cyan> | IP ADDRESS: <cyan>{identifier}</cyan> | TOKEN: {truncate_token(token)}")
-        else:
-            logger.warning(f"<yellow>Invalid or no response from {url}</yellow>")
+        url = DOMAIN_API["PING"][url_index]
 
-    except Exception as e:
-        logger.error(f"<red>Error during pinging via proxy {proxy}: {e}</red>")
+        data = {
+            "id": account_info.get("uid"),
+            "browser_id": browser_id,
+            "timestamp": int(time.time()),
+            "version": "2.2.7"
+        }
 
+        try:
+            response = await call_api(url, data, token, proxy=proxy, timeout=120)
+            if response and response.get("data"):
+
+                status_connect = CONNECTION_STATES["CONNECTED"]
+                response_data = response["data"]
+                ip_score = response_data.get("ip_score", "N/A")
+                identifier = extract_proxy_ip(proxy) if proxy else get_ip_address()
+                logger.info(
+                    f"<green>PING SUCCESSFULL</green> | NETWORK QUALITY: <cyan>{ip_score}</cyan> | IP ADDRESS: <cyan>{identifier}</cyan> | TOKEN: {truncate_token(token)}")
+
+            else:
+                logger.warning(f"<yellow>Invalid or no response from {url}</yellow>")
+
+            url_index = (url_index + 1) % len(DOMAIN_API["PING"])
+
+        except Exception as e:
+            logger.error(f"<red>Error during pinging via proxy {proxy}: {e}</red>")
+
+        await asyncio.sleep(ping_interval)
 
 async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
     proxies = proxies or []
@@ -256,18 +268,23 @@ async def main():
     proxies = ask_user_for_proxy()
 
     if not proxies:
-        logger.info("<green>Processing without proxies...</green>")
+        logger.info("<green>Processing...</green>")
     else:
         logger.info("<green>Proceeding with proxies...</green>")
-
     token_proxy_pairs = assign_proxies_to_tokens(tokens, proxies)
+    asyncio.create_task(asyncio.to_thread(schedule_daily_claim))
+    users_data = await asyncio.gather(*(get_account_info(token) for token in tokens), return_exceptions=True)
+    log_user_data([data for data in users_data if not isinstance(data, Exception)])
 
-    # Proses token satu per satu (hanya sekali)
-    for token, proxy in token_proxy_pairs:
-        await process_account(token, use_proxy=bool(proxy), proxies=[proxy] if proxy else [])
+    logger.info("Waiting before starting tasks...")
+    await asyncio.sleep(5)
 
-    logger.info("All tasks completed. Exiting program.")
-    sys.exit(0)  # Menghentikan program setelah semua selesai
+    tasks = await create_tasks(token_proxy_pairs)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error(f"<red>Task failed: {result}</red>")
 
 if __name__ == '__main__':
     try:
