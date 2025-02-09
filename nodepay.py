@@ -16,17 +16,6 @@ from termcolor import colored
 from daily import run_daily_claim
 from fake_useragent import UserAgent
 
-import asyncio
-import json
-import sys
-import time
-import uuid
-from urllib.parse import urlparse
-import cloudscraper
-import requests
-from loguru import logger
-from fake_useragent import UserAgent
-
 # Global configuration
 SHOW_REQUEST_ERROR_LOG = False
 
