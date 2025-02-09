@@ -38,6 +38,33 @@ def load_file(filename):
 def ask_user_for_proxy():
     return []  # Tidak menggunakan proxy secara default
 
+ef get_ip_address(proxy=None):
+    try:
+        url = "https://api.ipify.org?format=json"
+        response = cloudscraper.create_scraper().get(url, proxies={"http": proxy, "https": proxy} if proxy else None)
+        return response.json().get("ip", "Unknown") if response.status_code == 200 else "Unknown"
+    except Exception as e:
+        logger.error(f"<red>Failed to fetch IP address: {e}</red>")
+    return "Unknown"
+
+def log_user_data(users_data):
+    if not users_data:
+        logger.error("<red>No user data available.</red>")
+        return
+
+    try:
+        for user_data in users_data:
+            name = user_data.get("name", "Unknown")
+            balance = user_data.get("balance", {})
+            logger.info(f"User: <green>{name}</green>, "
+                        f"Current Amount: <green>{balance.get('current_amount', 0)}</green>, "
+                        f"Total Collected: <green>{balance.get('total_collected', 0)}</green>")
+
+    except Exception as e:
+        if SHOW_REQUEST_ERROR_LOG:
+            logger.error(f"Logging error: {e}")
+
+
 async def call_api(url, data, token, proxy=None, timeout=60):
     headers = {
         "Authorization": f"Bearer {token}",
@@ -94,7 +121,6 @@ async def get_account_info(token, proxy=None):
     except Exception as e:
         logger.error(f"<red>Error fetching account info for token {token[-10:]}: {e}</red>")
     return None
-
 async def start_ping(token, account_info, proxy):
     browser_id = str(uuid.uuid4())
 
