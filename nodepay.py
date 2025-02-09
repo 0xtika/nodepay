@@ -38,7 +38,7 @@ def load_file(filename):
 def ask_user_for_proxy():
     return []  # Tidak menggunakan proxy secara default
 
-ef get_ip_address(proxy=None):
+def get_ip_address(proxy=None):
     try:
         url = "https://api.ipify.org?format=json"
         response = cloudscraper.create_scraper().get(url, proxies={"http": proxy, "https": proxy} if proxy else None)
