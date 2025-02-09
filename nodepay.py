@@ -197,20 +197,17 @@ async def start_ping(token, account_info, proxy, browser_id=None):
         logger.error(f"<red>Error during pinging via proxy {proxy}: {e}</red>")
 
 
-async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
+async def process_account(token, use_proxy, proxies=None):
     proxies = proxies or []
     proxy_list = proxies if use_proxy else [None]
 
     proxy = proxy_list[0] if proxy_list else None
     browser_id = str(uuid.uuid4())
 
-    account_info = None
+    account_info = await get_account_info(token, proxy=proxy)
     if not account_info:
-        account_info = await get_account_info(token, proxy=proxy)
-
-        if not account_info:
-            logger.error(f"<red>Account info not found for token: {token[-10:]}</red>")
-            return
+        logger.error(f"<red>Account info not found for token: {truncate_token(token)}</red>")
+        return
 
     for proxy in proxy_list:
         try:
@@ -218,16 +215,18 @@ async def process_account(token, use_proxy, proxies=None, ping_interval=2.0):
 
             if response and response.get("code") == 0:
                 account_info = response["data"]
-                log_user_data(account_info)
+                log_user_data([account_info])
 
-                await start_ping(token, account_info, proxy, ping_interval, browser_id)
+                # ✅ Pemanggilan fungsi yang benar (tanpa ping_interval)
+                await start_ping(token, account_info, proxy, browser_id)
                 return
 
             logger.warning(f"<yellow>Invalid or no response for token with proxy {proxy}</yellow>")
         except Exception as e:
-            logger.error(f"<red>Error with proxy {proxy} for token {token[-10:]}: {e}</red>")
+            logger.error(f"<red>Error with proxy {proxy} for token {truncate_token(token)}: {e}</red>")
 
-    logger.error(f"<red>All attempts failed for token {token[-10:]}</red>")
+    logger.error(f"<red>All attempts failed for token {truncate_token(token)}</red>")
+
 async def create_tasks(token_proxy_pairs):
     return [
         call_api(DOMAIN_API["SESSION"], data={}, token=token, proxy=proxy)
