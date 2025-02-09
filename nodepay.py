@@ -281,7 +281,7 @@ async def main():
 
     tasks = await create_tasks(token_proxy_pairs)
     results = await asyncio.gather(*tasks, return_exceptions=True)
-
+    sys.exit(0)
     for result in results:
         if isinstance(result, Exception):
             logger.error(f"<red>Task failed: {result}</red>")
